@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, status, File, Form
 from fastapi.datastructures import UploadFile
+from fastapi.responses import HTMLResponse
 from datetime import datetime
 from router import select_model
 from ai_client import ask_ai, ask_ai_vision
@@ -14,6 +15,8 @@ from event_system.endpoints import router as event_router
 from event_system.event_system_manager import event_system_manager
 from pipeline.router import router as pipeline_router
 from trading.router import router as trading_router
+import psutil
+import os
 
 app = FastAPI()
 
@@ -32,30 +35,310 @@ app.include_router(pipeline_router, prefix="/pipeline")
 # Include trading routes
 app.include_router(trading_router, prefix="/trading")
 
-@app.get("/")
-def root():
-    return {
-        "system": "ATSAWIN AI CORE",
-        "status": "ONLINE",
-        "time": str(datetime.now()),
-        "services": {
-            "hermes": "online",
-            "postgres": "online",
-            "redis": "online",
-            "telegram": "online"
-        },
-        "features": {
-            "autonomous_execution": "enabled",
-            "hermes_integration": "enabled",
-            "multi_agent": "enabled",
-            "memory_system": "enabled",
-            "authentication": "enabled",
-            "system_resource_manager": "enabled",
-            "event_system": "enabled",
-            "autonomous_coding_pipeline": "enabled",
-            "trading_ai": "enabled"
-        },
-    }
+
+def get_system_stats():
+    """Get real system stats."""
+    try:
+        cpu = psutil.cpu_percent(interval=0.1)
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        return {
+            "cpu_percent": cpu,
+            "mem_total_gb": round(mem.total / (1024**3), 1),
+            "mem_used_gb": round(mem.used / (1024**3), 1),
+            "mem_percent": mem.percent,
+            "disk_total_gb": round(disk.total / (1024**3), 1),
+            "disk_used_gb": round(disk.used / (1024**3), 1),
+            "disk_percent": disk.percent,
+        }
+    except Exception:
+        return {
+            "cpu_percent": 0,
+            "mem_total_gb": 0, "mem_used_gb": 0, "mem_percent": 0,
+            "disk_total_gb": 0, "disk_used_gb": 0, "disk_percent": 0,
+        }
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    """Main dashboard page."""
+    stats = get_system_stats()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    html = f"""
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🤖 Atsawin AI Dashboard</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0a0a1a;
+  color: #e0e0e0;
+  min-height: 100vh;
+}}
+.header {{
+  background: linear-gradient(135deg, #1a1a3e 0%, #0d0d2b 100%);
+  border-bottom: 1px solid #2a2a5a;
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}}
+.header h1 {{
+  font-size: 1.5em;
+  background: linear-gradient(90deg, #00d4ff, #7b2fff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}}
+.header .status {{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #00ff88;
+  font-size: 0.9em;
+}}
+.status-dot {{
+  width: 10px; height: 10px;
+  background: #00ff88;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}}
+@keyframes pulse {{
+  0%, 100% {{ opacity: 1; }}
+  50% {{ opacity: 0.4; }}
+}}
+.container {{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px 20px;
+}}
+.section-title {{
+  font-size: 1.1em;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 15px;
+  margin-top: 30px;
+}}
+.grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}}
+.card {{
+  background: linear-gradient(135deg, #151530 0%, #1a1a3e 100%);
+  border: 1px solid #2a2a5a;
+  border-radius: 12px;
+  padding: 20px;
+  transition: transform 0.2s, border-color 0.2s;
+}}
+.card:hover {{
+  transform: translateY(-2px);
+  border-color: #4a4a8a;
+}}
+.card .label {{
+  font-size: 0.8em;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}}
+.card .value {{
+  font-size: 1.8em;
+  font-weight: 700;
+  color: #fff;
+}}
+.card .sub {{
+  font-size: 0.85em;
+  color: #666;
+  margin-top: 5px;
+}}
+.card.green {{ border-left: 3px solid #00ff88; }}
+.card.blue {{ border-left: 3px solid #00d4ff; }}
+.card.purple {{ border-left: 3px solid #7b2fff; }}
+.card.orange {{ border-left: 3px solid #ff8c00; }}
+.card.red {{ border-left: 3px solid #ff4444; }}
+
+.progress-bar {{
+  width: 100%;
+  height: 6px;
+  background: #2a2a5a;
+  border-radius: 3px;
+  margin-top: 10px;
+  overflow: hidden;
+}}
+.progress-bar .fill {{
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s;
+}}
+.fill.green {{ background: linear-gradient(90deg, #00ff88, #00cc66); }}
+.fill.blue {{ background: linear-gradient(90deg, #00d4ff, #0099cc); }}
+.fill.orange {{ background: linear-gradient(90deg, #ff8c00, #cc6600); }}
+.fill.red {{ background: linear-gradient(90deg, #ff4444, #cc0000); }}
+
+.services {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}}
+.service {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 15px;
+  background: #151530;
+  border: 1px solid #2a2a5a;
+  border-radius: 8px;
+}}
+.service .dot {{
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}}
+.service .dot.on {{ background: #00ff88; }}
+.service .dot.off {{ background: #ff4444; }}
+.service .name {{ flex: 1; font-size: 0.9em; }}
+.service .badge {{
+  font-size: 0.7em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #00ff8822;
+  color: #00ff88;
+}}
+.service .badge.off {{
+  background: #ff444422;
+  color: #ff4444;
+}}
+
+.links {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}}
+.link {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px;
+  background: #151530;
+  border: 1px solid #2a2a5a;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #e0e0e0;
+  transition: all 0.2s;
+}}
+.link:hover {{
+  border-color: #00d4ff;
+  background: #1a1a4e;
+}}
+.link .icon {{ font-size: 1.3em; }}
+.link .text {{ font-size: 0.9em; }}
+.link .arrow {{ margin-left: auto; color: #666; }}
+
+.footer {{
+  text-align: center;
+  padding: 30px;
+  color: #444;
+  font-size: 0.85em;
+}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🤖 Atsawin AI Operating System</h1>
+  <div class="status">
+    <div class="status-dot"></div>
+    <span>ALL SYSTEMS ONLINE</span>
+    <span style="color:#666;margin-left:10px;">{now}</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="section-title">📊 System Resources</div>
+  <div class="grid">
+    <div class="card blue">
+      <div class="label">CPU Usage</div>
+      <div class="value">{stats['cpu_percent']}%</div>
+      <div class="progress-bar"><div class="fill blue" style="width:{stats['cpu_percent']}%"></div></div>
+    </div>
+    <div class="card green">
+      <div class="label">Memory</div>
+      <div class="value">{stats['mem_percent']}%</div>
+      <div class="sub">{stats['mem_used_gb']} / {stats['mem_total_gb']} GB</div>
+      <div class="progress-bar"><div class="fill {'red' if stats['mem_percent'] > 80 else 'green'}" style="width:{stats['mem_percent']}%"></div></div>
+    </div>
+    <div class="card purple">
+      <div class="label">Disk</div>
+      <div class="value">{stats['disk_percent']}%</div>
+      <div class="sub">{stats['disk_used_gb']} / {stats['disk_total_gb']} GB</div>
+      <div class="progress-bar"><div class="fill {'orange' if stats['disk_percent'] > 70 else 'blue'}" style="width:{stats['disk_percent']}%"></div></div>
+    </div>
+  </div>
+
+  <div class="section-title">⚡ Services</div>
+  <div class="services">
+    <div class="service"><div class="dot on"></div><div class="name">FastAPI Backend</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">PostgreSQL</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">Redis Cache</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">Telegram Bot</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">Event System</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">Trading AI</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">Multi-Agent</div><div class="badge">ON</div></div>
+    <div class="service"><div class="dot on"></div><div class="name">EA Bridge</div><div class="badge">ON</div></div>
+  </div>
+
+  <div class="section-title">🔗 Quick Links</div>
+  <div class="links">
+    <a class="link" href="/docs" target="_blank">
+      <span class="icon">📡</span>
+      <span class="text">API Docs (Swagger)</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="/redoc" target="_blank">
+      <span class="icon">📖</span>
+      <span class="text">API Reference (ReDoc)</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="/health" target="_blank">
+      <span class="icon">💚</span>
+      <span class="text">Health Check</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="/trading/market/price?symbol=BTCUSDT" target="_blank">
+      <span class="icon">💰</span>
+      <span class="text">BTC Price</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="/trading/analysis/signal?symbol=BTCUSDT&timeframe=1h" target="_blank">
+      <span class="icon">📈</span>
+      <span class="text">BTC Trading Signal</span>
+      <span class="arrow">→</span>
+    </a>
+    <a class="link" href="/system/status" target="_blank">
+      <span class="icon">🖥️</span>
+      <span class="text">System Status</span>
+      <span class="arrow">→</span>
+    </a>
+  </div>
+
+</div>
+
+<div class="footer">
+  Atsawin AI Operating System v1.0 • Built with ❤️ by Atsawin AI
+</div>
+
+</body>
+</html>
+"""
+    return html
+
 
 @app.get("/health")
 def health():
