@@ -6,1666 +6,511 @@
 <title>ATSAWIN DeFi — Yield Farming Protocol</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
-
-:root {
-  --neon-cyan: #00f0ff;
-  --neon-magenta: #ff00ff;
-  --neon-green: #00ff88;
-  --neon-yellow: #f0ff00;
-  --neon-red: #ff0044;
-  --neon-orange: #ff8800;
-  --neon-purple: #8800ff;
-  --bg-dark: #0a0a12;
-  --bg-card: #0d0d1a;
-  --bg-card-hover: #12122a;
-  --border: #1a1a3a;
-  --text: #e0e0f0;
-  --text-dim: #6666aa;
-}
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  font-family: 'Rajdhani', sans-serif;
-  background: var(--bg-dark);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-/* ─── ANIMATED BACKGROUND ─── */
-.bg-grid {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background-image:
-    linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px);
-  background-size: 50px 50px;
-  z-index: 0;
-  animation: gridMove 20s linear infinite;
-}
-
-@keyframes gridMove {
-  0% { transform: perspective(500px) rotateX(60deg) translateY(0); }
-  100% { transform: perspective(500px) rotateX(60deg) translateY(50px); }
-}
-
-.bg-glow {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(0,240,255,0.08) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(255,0,255,0.06) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 80%, rgba(0,255,136,0.04) 0%, transparent 50%);
-  z-index: 0;
-  pointer-events: none;
-}
-
-.particles {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.particle {
-  position: absolute;
-  width: 2px; height: 2px;
-  background: var(--neon-cyan);
-  border-radius: 50%;
-  animation: float 15s infinite;
-  opacity: 0;
-}
-
-@keyframes float {
-  0% { opacity: 0; transform: translateY(100vh) scale(0); }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-10vh) scale(1); }
-}
-
-/* ─── NAVIGATION ─── */
-nav {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%;
-  padding: 15px 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 1000;
-  background: rgba(10,10,18,0.8);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--border);
-}
-
-.logo {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.4em;
-  font-weight: 900;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 30px rgba(0,240,255,0.5);
-}
-
-.logo span {
-  font-size: 0.6em;
-  color: var(--neon-green);
-  -webkit-text-fill-color: var(--neon-green);
-  display: block;
-  letter-spacing: 3px;
-}
-
-.nav-links {
-  display: flex;
-  gap: 30px;
-  list-style: none;
-}
-
-.nav-links a {
-  color: var(--text-dim);
-  text-decoration: none;
-  font-size: 0.95em;
-  font-weight: 500;
-  letter-spacing: 1px;
-  transition: all 0.3s;
-  position: relative;
-}
-
-.nav-links a:hover {
-  color: var(--neon-cyan);
-  text-shadow: 0 0 10px var(--neon-cyan);
-}
-
-.nav-links a::after {
-  content: '';
-  position: absolute;
-  bottom: -5px; left: 0;
-  width: 0; height: 1px;
-  background: var(--neon-cyan);
-  transition: width 0.3s;
-  box-shadow: 0 0 10px var(--neon-cyan);
-}
-
-.nav-links a:hover::after { width: 100%; }
-
-.btn-connect {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.8em;
-  padding: 10px 25px;
-  background: transparent;
-  border: 1px solid var(--neon-cyan);
-  color: var(--neon-cyan);
-  cursor: pointer;
-  letter-spacing: 2px;
-  transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
-}
-
-.btn-connect:hover {
-  background: rgba(0,240,255,0.1);
-  box-shadow: 0 0 20px rgba(0,240,255,0.3), inset 0 0 20px rgba(0,240,255,0.1);
-  text-shadow: 0 0 10px var(--neon-cyan);
-}
-
-.btn-connect.connected {
-  border-color: var(--neon-green);
-  color: var(--neon-green);
-}
-
-/* ─── HERO SECTION ─── */
-.hero {
-  position: relative;
-  z-index: 1;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 120px 20px 80px;
-}
-
-.hero-content {
-  max-width: 900px;
-}
-
-.hero-badge {
-  display: inline-block;
-  padding: 6px 20px;
-  border: 1px solid var(--neon-cyan);
-  border-radius: 20px;
-  font-size: 0.8em;
-  color: var(--neon-cyan);
-  letter-spacing: 3px;
-  margin-bottom: 30px;
-  animation: glowPulse 2s infinite;
-}
-
-@keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 10px rgba(0,240,255,0.2); }
-  50% { box-shadow: 0 0 25px rgba(0,240,255,0.4); }
-}
-
-.hero h1 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 4em;
-  font-weight: 900;
-  line-height: 1.1;
-  margin-bottom: 20px;
-}
-
-.hero h1 .line1 {
-  display: block;
-  background: linear-gradient(90deg, #fff, var(--neon-cyan));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.hero h1 .line2 {
-  display: block;
-  background: linear-gradient(90deg, var(--neon-magenta), var(--neon-cyan), var(--neon-green));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-size: 200% auto;
-  animation: gradientShift 3s linear infinite;
-}
-
-@keyframes gradientShift {
-  0% { background-position: 0% center; }
-  100% { background-position: 200% center; }
-}
-
-.hero p {
-  font-size: 1.2em;
-  color: var(--text-dim);
-  max-width: 600px;
-  margin: 0 auto 40px;
-  line-height: 1.6;
-}
-
-.hero-buttons {
-  display: flex;
-  gap: 20px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.btn-primary {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.9em;
-  padding: 15px 40px;
-  background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
-  border: none;
-  color: #000;
-  font-weight: 700;
-  cursor: pointer;
-  letter-spacing: 2px;
-  transition: all 0.3s;
-  position: relative;
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 30px rgba(0,240,255,0.4);
-}
-
-.btn-secondary {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.9em;
-  padding: 15px 40px;
-  background: transparent;
-  border: 1px solid var(--neon-magenta);
-  color: var(--neon-magenta);
-  cursor: pointer;
-  letter-spacing: 2px;
-  transition: all 0.3s;
-}
-
-.btn-secondary:hover {
-  background: rgba(255,0,255,0.1);
-  box-shadow: 0 0 20px rgba(255,0,255,0.3);
-}
-
-/* ─── LIVE SIGNALS TICKER ─── */
-.ticker-wrap {
-  position: relative;
-  z-index: 1;
-  background: rgba(13,13,26,0.9);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  padding: 15px 0;
-  overflow: hidden;
-}
-
-.ticker {
-  display: flex;
-  animation: tickerScroll 30s linear infinite;
-  white-space: nowrap;
-}
-
-.ticker:hover { animation-play-state: paused; }
-
-@keyframes tickerScroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-.ticker-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 30px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.9em;
-}
-
-.ticker-item .symbol { color: var(--neon-cyan); font-weight: 600; }
-.ticker-item .price { color: #fff; }
-.ticker-item .change { font-weight: 600; }
-.ticker-item .change.up { color: var(--neon-green); }
-.ticker-item .change.down { color: var(--neon-red); }
-.ticker-item .signal { padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 700; }
-.ticker-item .signal.buy { background: rgba(0,255,136,0.15); color: var(--neon-green); border: 1px solid var(--neon-green); }
-.ticker-item .signal.sell { background: rgba(255,0,68,0.15); color: var(--neon-red); border: 1px solid var(--neon-red); }
-.ticker-item .signal.hold { background: rgba(240,255,0,0.15); color: var(--neon-yellow); border: 1px solid var(--neon-yellow); }
-.ticker-item .divider { color: var(--border); }
-
-/* ─── SECTION STYLES ─── */
-section {
-  position: relative;
-  z-index: 1;
-  padding: 80px 40px;
-}
-
-.section-header {
-  text-align: center;
-  margin-bottom: 50px;
-}
-
-.section-header h2 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 2.2em;
-  font-weight: 700;
-  margin-bottom: 10px;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.section-header p {
-  color: var(--text-dim);
-  font-size: 1.1em;
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-/* ─── APY CALCULATOR ─── */
-.calculator-section {
-  background: linear-gradient(180deg, transparent, rgba(0,240,255,0.02), transparent);
-}
-
-.calc-container {
-  max-width: 700px;
-  margin: 0 auto;
-}
-
-.calc-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 40px;
-  position: relative;
-  overflow: hidden;
-}
-
-.calc-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 2px;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta), var(--neon-green));
-}
-
-.calc-row {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 25px;
-  flex-wrap: wrap;
-}
-
-.calc-field {
-  flex: 1;
-  min-width: 200px;
-}
-
-.calc-field label {
-  display: block;
-  font-size: 0.85em;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.calc-field input,
-.calc-field select {
-  width: 100%;
-  padding: 12px 15px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: #fff;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 1.1em;
-  transition: border-color 0.3s;
-}
-
-.calc-field input:focus,
-.calc-field select:focus {
-  outline: none;
-  border-color: var(--neon-cyan);
-  box-shadow: 0 0 15px rgba(0,240,255,0.2);
-}
-
-.calc-field select option {
-  background: var(--bg-card);
-  color: #fff;
-}
-
-.calc-result {
-  margin-top: 30px;
-  padding: 25px;
-  background: rgba(0,240,255,0.05);
-  border: 1px solid rgba(0,240,255,0.2);
-  border-radius: 12px;
-  text-align: center;
-}
-
-.calc-result .apy-label {
-  font-size: 0.85em;
-  color: var(--text-dim);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}
-
-.calc-result .apy-value {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 3em;
-  font-weight: 900;
-  color: var(--neon-green);
-  text-shadow: 0 0 30px rgba(0,255,136,0.5);
-}
-
-.calc-result .earnings {
-  display: flex;
-  justify-content: center;
-  gap: 40px;
-  margin-top: 20px;
-  flex-wrap: wrap;
-}
-
-.calc-result .earning-item {
-  text-align: center;
-}
-
-.calc-result .earning-item .label {
-  font-size: 0.8em;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-}
-
-.calc-result .earning-item .value {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 1.3em;
-  color: var(--neon-cyan);
-  margin-top: 5px;
-}
-
-/* ─── LIQUIDITY POOLS ─── */
-.pools-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.pool-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 25px;
-  transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
-}
-
-.pool-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.pool-card:hover {
-  border-color: var(--neon-cyan);
-  transform: translateY(-3px);
-  box-shadow: 0 10px 40px rgba(0,240,255,0.1);
-}
-
-.pool-card:hover::before { opacity: 1; }
-
-.pool-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.pool-pair {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pool-pair .icons {
-  display: flex;
-}
-
-.pool-pair .icon {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8em;
-  font-weight: 700;
-  border: 2px solid var(--bg-card);
-}
-
-.pool-pair .icon:first-child { background: linear-gradient(135deg, #f7931a, #ffab40); }
-.pool-pair .icon:last-child { background: linear-gradient(135deg, #627eea, #8c9eff); margin-left: -8px; }
-
-.pool-pair .name {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1em;
-  font-weight: 600;
-}
-
-.pool-apy {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.3em;
-  font-weight: 700;
-  color: var(--neon-green);
-  text-shadow: 0 0 15px rgba(0,255,136,0.3);
-}
-
-.pool-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin-bottom: 20px;
-}
-
-.pool-stat .label {
-  font-size: 0.75em;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.pool-stat .value {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 1.1em;
-  color: #fff;
-  margin-top: 3px;
-}
-
-.pool-signal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 15px;
-  background: rgba(0,0,0,0.2);
-  border-radius: 8px;
-  margin-bottom: 15px;
-}
-
-.pool-signal .signal-badge {
-  padding: 3px 10px;
-  border-radius: 4px;
-  font-size: 0.8em;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.pool-signal .signal-badge.buy { background: rgba(0,255,136,0.15); color: var(--neon-green); border: 1px solid var(--neon-green); }
-.pool-signal .signal-badge.sell { background: rgba(255,0,68,0.15); color: var(--neon-red); border: 1px solid var(--neon-red); }
-.pool-signal .signal-badge.hold { background: rgba(240,255,0,0.15); color: var(--neon-yellow); border: 1px solid var(--neon-yellow); }
-
-.pool-signal .confidence {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.85em;
-  color: var(--text-dim);
-}
-
-.pool-signal .confidence span {
-  color: var(--neon-cyan);
-}
-
-.btn-stake {
-  width: 100%;
-  padding: 12px;
-  background: transparent;
-  border: 1px solid var(--neon-cyan);
-  color: var(--neon-cyan);
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.8em;
-  letter-spacing: 2px;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: all 0.3s;
-}
-
-.btn-stake:hover {
-  background: rgba(0,240,255,0.1);
-  box-shadow: 0 0 15px rgba(0,240,255,0.2);
-}
-
-/* ─── TOKENOMICS ─── */
-.tokenomics-section {
-  background: linear-gradient(180deg, transparent, rgba(255,0,255,0.02), transparent);
-}
-
-.tokenomics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  max-width: 1000px;
-  margin: 0 auto 50px;
-}
-
-.token-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 25px;
-  text-align: center;
-  transition: all 0.3s;
-}
-
-.token-card:hover {
-  border-color: var(--neon-magenta);
-  transform: translateY(-3px);
-}
-
-.token-card .icon {
-  font-size: 2em;
-  margin-bottom: 10px;
-}
-
-.token-card .label {
-  font-size: 0.8em;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}
-
-.token-card .value {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.5em;
-  font-weight: 700;
-  color: var(--neon-cyan);
-}
-
-.token-card .sub {
-  font-size: 0.85em;
-  color: var(--text-dim);
-  margin-top: 5px;
-}
-
-/* ─── CHART SECTION ─── */
-.chart-container {
-  max-width: 1000px;
-  margin: 0 auto;
-}
-
-.chart-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 30px;
-  position: relative;
-  overflow: hidden;
-}
-
-.chart-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 2px;
-  background: linear-gradient(90deg, var(--neon-magenta), var(--neon-cyan));
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 25px;
-  flex-wrap: wrap;
-  gap: 15px;
-}
-
-.chart-title {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.2em;
-}
-
-.chart-timeframes {
-  display: flex;
-  gap: 5px;
-}
-
-.chart-timeframes button {
-  padding: 6px 15px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.85em;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.3s;
-}
-
-.chart-timeframes button.active,
-.chart-timeframes button:hover {
-  border-color: var(--neon-cyan);
-  color: var(--neon-cyan);
-  background: rgba(0,240,255,0.1);
-}
-
-.chart-area {
-  width: 100%;
-  height: 300px;
-  position: relative;
-}
-
-.chart-canvas {
-  width: 100%;
-  height: 100%;
-}
-
-.chart-tooltip {
-  position: absolute;
-  top: 10px; right: 10px;
-  background: rgba(13,13,26,0.9);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 15px;
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 0.85em;
-}
-
-.chart-tooltip .price {
-  font-size: 1.3em;
-  color: #fff;
-  margin-bottom: 5px;
-}
-
-.chart-tooltip .change { font-weight: 600; }
-.chart-tooltip .change.up { color: var(--neon-green); }
-.chart-tooltip .change.down { color: var(--neon-red); }
-
-/* ─── SIGNAL BOARD ─── */
-.signal-board {
-  max-width: 1000px;
-  margin: 0 auto;
-}
-
-.signal-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.signal-table th {
-  padding: 15px;
-  text-align: left;
-  font-size: 0.8em;
-  color: var(--text-dim);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
-}
-
-.signal-table td {
-  padding: 15px;
-  border-bottom: 1px solid rgba(26,26,58,0.5);
-  font-family: 'Share Tech Mono', monospace;
-}
-
-.signal-table tr:hover td {
-  background: rgba(0,240,255,0.03);
-}
-
-.signal-table .symbol-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.signal-table .symbol-icon {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7em;
-  font-weight: 700;
-}
-
-.signal-table .badge {
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 0.85em;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.signal-table .badge.buy { background: rgba(0,255,136,0.15); color: var(--neon-green); border: 1px solid var(--neon-green); }
-.signal-table .badge.sell { background: rgba(255,0,68,0.15); color: var(--neon-red); border: 1px solid var(--neon-red); }
-.signal-table .badge.hold { background: rgba(240,255,0,0.15); color: var(--neon-yellow); border: 1px solid var(--neon-yellow); }
-
-/* ─── WALLET MODAL ─── */
-.modal-overlay {
-  display: none;
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: rgba(0,0,0,0.8);
-  z-index: 2000;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(10px);
-}
-
-.modal-overlay.active { display: flex; }
-
-.modal {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 40px;
-  max-width: 450px;
-  width: 90%;
-  position: relative;
-}
-
-.modal::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 2px;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
-}
-
-.modal h3 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 1.3em;
-  margin-bottom: 10px;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.modal p {
-  color: var(--text-dim);
-  font-size: 0.95em;
-  margin-bottom: 25px;
-}
-
-.wallet-options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.wallet-option {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 15px;
-  background: rgba(0,0,0,0.2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s;
-  color: #fff;
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 1em;
-}
-
-.wallet-option:hover {
-  border-color: var(--neon-cyan);
-  background: rgba(0,240,255,0.05);
-}
-
-.wallet-option .wallet-icon {
-  width: 36px; height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2em;
-}
-
-.wallet-option .wallet-name { flex: 1; font-weight: 600; }
-
-.modal-close {
-  position: absolute;
-  top: 15px; right: 15px;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 1.5em;
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.modal-close:hover { color: var(--neon-red); }
-
-/* ─── FOOTER ─── */
-footer {
-  position: relative;
-  z-index: 1;
-  padding: 40px;
-  text-align: center;
-  border-top: 1px solid var(--border);
-  background: rgba(13,13,26,0.5);
-}
-
-footer p {
-  color: var(--text-dim);
-  font-size: 0.9em;
-}
-
-footer .social-links {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-footer .social-links a {
-  color: var(--text-dim);
-  font-size: 1.3em;
-  transition: all 0.3s;
-}
-
-footer .social-links a:hover {
-  color: var(--neon-cyan);
-  text-shadow: 0 0 10px var(--neon-cyan);
-}
-
-/* ─── RESPONSIVE ─── */
-@media (max-width: 768px) {
-  nav { padding: 15px 20px; }
-  .nav-links { display: none; }
-  .hero h1 { font-size: 2.5em; }
-  .hero p { font-size: 1em; }
-  section { padding: 60px 20px; }
-  .section-header h2 { font-size: 1.6em; }
-  .calc-card { padding: 25px; }
-  .calc-result .apy-value { font-size: 2em; }
-  .signal-table { font-size: 0.85em; }
-  .signal-table th, .signal-table td { padding: 10px 8px; }
-}
-
-/* ─── LOADING ANIMATION ─── */
-.loading {
-  display: inline-block;
-  width: 20px; height: 20px;
-  border: 2px solid var(--border);
-  border-top-color: var(--neon-cyan);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ─── SCROLLBAR ─── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-dark); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); }
+:root{--c:#00f0ff;--m:#ff00ff;--g:#00ff88;--y:#f0ff00;--r:#ff0044;--o:#ff8800;--p:#8800ff;--bg:#0a0a12;--card:#0d0d1a;--border:#1a1a3a;--t:#e0e0f0;--td:#6666aa}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Rajdhani',sans-serif;background:var(--bg);color:var(--t);min-height:100vh;overflow-x:hidden}
+.bg-grid{position:fixed;top:0;left:0;width:100%;height:100%;background-image:linear-gradient(rgba(0,240,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.03) 1px,transparent 1px);background-size:50px 50px;z-index:0;animation:gm 20s linear infinite}
+@keyframes gm{0%{transform:perspective(500px) rotateX(60deg) translateY(0)}100%{transform:perspective(500px) rotateX(60deg) translateY(50px)}}
+.bg-glow{position:fixed;top:0;left:0;width:100%;height:100%;background:radial-gradient(ellipse at 20% 50%,rgba(0,240,255,.08) 0%,transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(255,0,255,.06) 0%,transparent 50%);z-index:0;pointer-events:none}
+.particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.particle{position:absolute;width:2px;height:2px;background:var(--c);border-radius:50%;animation:float 15s infinite;opacity:0}
+@keyframes float{0%{opacity:0;transform:translateY(100vh) scale(0)}10%{opacity:1}90%{opacity:1}100%{opacity:0;transform:translateY(-10vh) scale(1)}}
+nav{position:fixed;top:0;left:0;width:100%;padding:15px 40px;display:flex;justify-content:space-between;align-items:center;z-index:1000;background:rgba(10,10,18,.8);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.logo{font-family:'Orbitron',sans-serif;font-size:1.4em;font-weight:900;background:linear-gradient(90deg,var(--c),var(--m));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo span{font-size:.6em;color:var(--g);-webkit-text-fill-color:var(--g);display:block;letter-spacing:3px}
+.nav-links{display:flex;gap:30px;list-style:none}
+.nav-links a{color:var(--td);text-decoration:none;font-size:.95em;font-weight:500;letter-spacing:1px;transition:all .3s;position:relative}
+.nav-links a:hover{color:var(--c);text-shadow:0 0 10px var(--c)}
+.nav-links a::after{content:'';position:absolute;bottom:-5px;left:0;width:0;height:1px;background:var(--c);transition:width .3s;box-shadow:0 0 10px var(--c)}
+.nav-links a:hover::after{width:100%}
+.btn{font-family:'Orbitron',sans-serif;font-size:.8em;padding:10px 25px;background:transparent;border:1px solid var(--c);color:var(--c);cursor:pointer;letter-spacing:2px;transition:all .3s}
+.btn:hover{background:rgba(0,240,255,.1);box-shadow:0 0 20px rgba(0,240,255,.3)}
+.btn.connected{border-color:var(--g);color:var(--g)}
+.btn-primary{font-family:'Orbitron',sans-serif;font-size:.9em;padding:15px 40px;background:linear-gradient(135deg,var(--c),var(--p));border:none;color:#000;font-weight:700;cursor:pointer;letter-spacing:2px;transition:all .3s}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 5px 30px rgba(0,240,255,.4)}
+.btn-secondary{font-family:'Orbitron',sans-serif;font-size:.9em;padding:15px 40px;background:transparent;border:1px solid var(--m);color:var(--m);cursor:pointer;letter-spacing:2px;transition:all .3s}
+.btn-secondary:hover{background:rgba(255,0,255,.1);box-shadow:0 0 20px rgba(255,0,255,.3)}
+.hero{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px 20px 80px}
+.hero-content{max-width:900px}
+.badge{display:inline-block;padding:6px 20px;border:1px solid var(--c);border-radius:20px;font-size:.8em;color:var(--c);letter-spacing:3px;margin-bottom:30px;animation:gp 2s infinite}
+@keyframes gp{0%,100%{box-shadow:0 0 10px rgba(0,240,255,.2)}50%{box-shadow:0 0 25px rgba(0,240,255,.4)}}
+.hero h1{font-family:'Orbitron',sans-serif;font-size:4em;font-weight:900;line-height:1.1;margin-bottom:20px}
+.hero h1 .l1{display:block;background:linear-gradient(90deg,#fff,var(--c));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero h1 .l2{display:block;background:linear-gradient(90deg,var(--m),var(--c),var(--g));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-size:200% auto;animation:gs 3s linear infinite}
+@keyframes gs{0%{background-position:0% center}100%{background-position:200% center}}
+.hero p{font-size:1.2em;color:var(--td);max-width:600px;margin:0 auto 40px;line-height:1.6}
+.hero-btns{display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
+.ticker-wrap{position:relative;z-index:1;background:rgba(13,13,26,.9);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:15px 0;overflow:hidden}
+.ticker{display:flex;animation:ts 30s linear infinite;white-space:nowrap}
+.ticker:hover{animation-play-state:paused}
+@keyframes ts{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.ti{display:inline-flex;align-items:center;gap:8px;padding:0 30px;font-family:'Share Tech Mono',monospace;font-size:.9em}
+.ti .s{color:var(--c);font-weight:600} .ti .p{color:#fff} .ti .sig{padding:2px 8px;border-radius:4px;font-size:.8em;font-weight:700}
+.ti .sig.b{background:rgba(0,255,136,.15);color:var(--g);border:1px solid var(--g)} .ti .sig.s{background:rgba(255,0,68,.15);color:var(--r);border:1px solid var(--r)} .ti .sig.h{background:rgba(240,255,0,.15);color:var(--y);border:1px solid var(--y)}
+section{position:relative;z-index:1;padding:80px 40px}
+.sh{text-align:center;margin-bottom:50px}
+.sh h2{font-family:'Orbitron',sans-serif;font-size:2.2em;font-weight:700;margin-bottom:10px;background:linear-gradient(90deg,var(--c),var(--m));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sh p{color:var(--td);font-size:1.1em;max-width:600px;margin:0 auto}
+.calc-section{background:linear-gradient(180deg,transparent,rgba(0,240,255,.02),transparent)}
+.calc-wrap{max-width:700px;margin:0 auto}
+.calc-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;position:relative;overflow:hidden}
+.calc-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--c),var(--m),var(--g))}
+.calc-row{display:flex;gap:20px;margin-bottom:25px;flex-wrap:wrap}
+.cf{flex:1;min-width:200px}
+.cf label{display:block;font-size:.85em;color:var(--td);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.cf input,.cf select{width:100%;padding:12px 15px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;color:#fff;font-family:'Share Tech Mono',monospace;font-size:1.1em;transition:border-color .3s}
+.cf input:focus,.cf select:focus{outline:none;border-color:var(--c);box-shadow:0 0 15px rgba(0,240,255,.2)}
+.cf select option{background:var(--card);color:#fff}
+.calc-res{margin-top:30px;padding:25px;background:rgba(0,240,255,.05);border:1px solid rgba(0,240,255,.2);border-radius:12px;text-align:center}
+.calc-res .al{font-size:.85em;color:var(--td);letter-spacing:2px;text-transform:uppercase;margin-bottom:5px}
+.calc-res .av{font-family:'Orbitron',sans-serif;font-size:3em;font-weight:900;color:var(--g);text-shadow:0 0 30px rgba(0,255,136,.5)}
+.calc-res .earnings{display:flex;justify-content:center;gap:40px;margin-top:20px;flex-wrap:wrap}
+.calc-res .ei{text-align:center} .calc-res .ei .l{font-size:.8em;color:var(--td);letter-spacing:1px} .calc-res .ei .v{font-family:'Share Tech Mono',monospace;font-size:1.3em;color:var(--c);margin-top:5px}
+.pools-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px;max-width:1200px;margin:0 auto}
+.pool{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:25px;transition:all .3s;position:relative;overflow:hidden}
+.pool::before{content:'';position:absolute;top:0;left:0;width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--c),transparent);opacity:0;transition:opacity .3s}
+.pool:hover{border-color:var(--c);transform:translateY(-3px);box-shadow:0 10px 40px rgba(0,240,255,.1)}
+.pool:hover::before{opacity:1}
+.pool-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.pool-pair{display:flex;align-items:center;gap:10px}
+.pool-pair .icons{display:flex}
+.pool-pair .ic{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8em;font-weight:700;border:2px solid var(--card)}
+.pool-pair .ic:first-child{background:linear-gradient(135deg,#f7931a,#ffab40)}
+.pool-pair .ic:last-child{background:linear-gradient(135deg,#627eea,#8c9eff);margin-left:-8px}
+.pool-pair .nm{font-family:'Orbitron',sans-serif;font-size:1em;font-weight:600}
+.pool-apy{font-family:'Orbitron',sans-serif;font-size:1.3em;font-weight:700;color:var(--g);text-shadow:0 0 15px rgba(0,255,136,.3)}
+.pool-stats{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px}
+.pool-stats .l{font-size:.75em;color:var(--td);letter-spacing:1px;text-transform:uppercase}
+.pool-stats .v{font-family:'Share Tech Mono',monospace;font-size:1.1em;color:#fff;margin-top:3px}
+.pool-sig{display:flex;align-items:center;gap:10px;padding:10px 15px;background:rgba(0,0,0,.2);border-radius:8px;margin-bottom:15px}
+.pool-sig .sb{padding:3px 10px;border-radius:4px;font-size:.8em;font-weight:700;letter-spacing:1px}
+.pool-sig .sb.b{background:rgba(0,255,136,.15);color:var(--g);border:1px solid var(--g)}
+.pool-sig .sb.s{background:rgba(255,0,68,.15);color:var(--r);border:1px solid var(--r)}
+.pool-sig .sb.h{background:rgba(240,255,0,.15);color:var(--y);border:1px solid var(--y)}
+.pool-sig .conf{font-family:'Share Tech Mono',monospace;font-size:.85em;color:var(--td)}
+.pool-sig .conf span{color:var(--c)}
+.btn-stake{width:100%;padding:12px;background:transparent;border:1px solid var(--c);color:var(--c);font-family:'Orbitron',sans-serif;font-size:.8em;letter-spacing:2px;cursor:pointer;border-radius:8px;transition:all .3s}
+.btn-stake:hover{background:rgba(0,240,255,.1);box-shadow:0 0 15px rgba(0,240,255,.2)}
+.btn-stake:disabled{opacity:.5;cursor:not-allowed}
+.tok-section{background:linear-gradient(180deg,transparent,rgba(255,0,255,.02),transparent)}
+.tok-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;max-width:1000px;margin:0 auto 50px}
+.tok-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:25px;text-align:center;transition:all .3s}
+.tok-card:hover{border-color:var(--m);transform:translateY(-3px)}
+.tok-card .ic{font-size:2em;margin-bottom:10px} .tok-card .l{font-size:.8em;color:var(--td);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px}
+.tok-card .v{font-family:'Orbitron',sans-serif;font-size:1.5em;font-weight:700;color:var(--c)} .tok-card .sub{font-size:.85em;color:var(--td);margin-top:5px}
+.chart-wrap{max-width:1000px;margin:0 auto}
+.chart-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:30px;position:relative;overflow:hidden}
+.chart-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--m),var(--c))}
+.chart-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;flex-wrap:wrap;gap:15px}
+.chart-title{font-family:'Orbitron',sans-serif;font-size:1.2em}
+.chart-tf{display:flex;gap:5px}
+.chart-tf button{padding:6px 15px;background:transparent;border:1px solid var(--border);color:var(--td);font-family:'Share Tech Mono',monospace;font-size:.85em;cursor:pointer;border-radius:4px;transition:all .3s}
+.chart-tf button.active,.chart-tf button:hover{border-color:var(--c);color:var(--c);background:rgba(0,240,255,.1)}
+.chart-area{width:100%;height:300px;position:relative}
+.chart-canvas{width:100%;height:100%}
+.chart-tt{position:absolute;top:10px;right:10px;background:rgba(13,13,26,.9);border:1px solid var(--border);border-radius:8px;padding:15px;font-family:'Share Tech Mono',monospace;font-size:.85em}
+.chart-tt .p{font-size:1.3em;color:#fff;margin-bottom:5px} .chart-tt .c{font-weight:600} .chart-tt .c.u{color:var(--g)} .chart-tt .c.d{color:var(--r)}
+.signal-board{max-width:1000px;margin:0 auto}
+.st{width:100%;border-collapse:collapse}
+.st th{padding:15px;text-align:left;font-size:.8em;color:var(--td);letter-spacing:2px;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.st td{padding:15px;border-bottom:1px solid rgba(26,26,58,.5);font-family:'Share Tech Mono',monospace}
+.st tr:hover td{background:rgba(0,240,255,.03)}
+.st .sc{display:flex;align-items:center;gap:10px}
+.st .si{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7em;font-weight:700}
+.st .badge{padding:4px 12px;border-radius:4px;font-size:.85em;font-weight:700;letter-spacing:1px}
+.st .badge.b{background:rgba(0,255,136,.15);color:var(--g);border:1px solid var(--g)}
+.st .badge.s{background:rgba(255,0,68,.15);color:var(--r);border:1px solid var(--r)}
+.st .badge.h{background:rgba(240,255,0,.15);color:var(--y);border:1px solid var(--y)}
+.st .loading{color:var(--td);text-align:center;padding:30px}
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.8);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(10px)}
+.modal-overlay.active{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:40px;max-width:450px;width:90%;position:relative}
+.modal::before{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--c),var(--m))}
+.modal h3{font-family:'Orbitron',sans-serif;font-size:1.3em;margin-bottom:10px;background:linear-gradient(90deg,var(--c),var(--m));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.modal p{color:var(--td);font-size:.95em;margin-bottom:25px}
+.wallet-opts{display:flex;flex-direction:column;gap:10px}
+.wallet-opt{display:flex;align-items:center;gap:15px;padding:15px;background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .3s;color:#fff;font-family:'Rajdhani',sans-serif;font-size:1em}
+.wallet-opt:hover{border-color:var(--c);background:rgba(0,240,255,.05)}
+.wallet-opt .wi{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2em}
+.wallet-opt .wn{flex:1;font-weight:600}
+.modal-close{position:absolute;top:15px;right:15px;background:none;border:none;color:var(--td);font-size:1.5em;cursor:pointer;transition:color .3s}
+.modal-close:hover{color:var(--r)}
+.toast{position:fixed;bottom:30px;right:30px;padding:15px 25px;background:var(--card);border:1px solid var(--c);border-radius:8px;color:var(--c);font-family:'Share Tech Mono',monospace;font-size:.9em;z-index:3000;transform:translateX(150%);transition:transform .3s}
+.toast.show{transform:translateX(0)}
+.toast.error{border-color:var(--r);color:var(--r)}
+.toast.success{border-color:var(--g);color:var(--g)}
+.stake-modal .modal{max-width:500px}
+.stake-form .cf{margin-bottom:15px}
+.stake-form .cf:last-child{margin-bottom:0}
+.stake-summary{margin-top:20px;padding:15px;background:rgba(0,240,255,.05);border:1px solid rgba(0,240,255,.2);border-radius:8px}
+.stake-summary .row{display:flex;justify-content:space-between;margin-bottom:8px;font-family:'Share Tech Mono',monospace;font-size:.9em}
+.stake-summary .row:last-child{margin-bottom:0;padding-top:8px;border-top:1px solid var(--border);font-weight:700;color:var(--g)}
+footer{position:relative;z-index:1;padding:40px;text-align:center;border-top:1px solid var(--border);background:rgba(13,13,26,.5)}
+footer p{color:var(--td);font-size:.9em}
+footer .sl{display:flex;justify-content:center;gap:20px;margin-bottom:20px}
+footer .sl a{color:var(--td);font-size:1.3em;transition:all .3s}
+footer .sl a:hover{color:var(--c);text-shadow:0 0 10px var(--c)}
+@media(max-width:768px){nav{padding:15px 20px}.nav-links{display:none}.hero h1{font-size:2.5em}.hero p{font-size:1em}section{padding:60px 20px}.sh h2{font-size:1.6em}.calc-card{padding:25px}.calc-res .av{font-size:2em}.st{font-size:.85em}.st th,.st td{padding:10px 8px}}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}::-webkit-scrollbar-thumb:hover{background:var(--c)}
 </style>
 </head>
 <body>
+<div class="bg-grid"></div><div class="bg-glow"></div><div class="particles" id="particles"></div>
 
-<!-- BACKGROUND -->
-<div class="bg-grid"></div>
-<div class="bg-glow"></div>
-<div class="particles" id="particles"></div>
-
-<!-- NAVIGATION -->
 <nav>
-  <div class="logo">
-    ATSAWIN
-    <span>DeFi Protocol</span>
-  </div>
+  <div class="logo">ATSAWIN<span>DeFi Protocol</span></div>
   <ul class="nav-links">
     <li><a href="#pools">Pools</a></li>
     <li><a href="#calculator">Calculator</a></li>
     <li><a href="#signals">Signals</a></li>
     <li><a href="#tokenomics">Tokenomics</a></li>
   </ul>
-  <button class="btn-connect" id="connectBtn" onclick="openWalletModal()">
-    CONNECT WALLET
-  </button>
+  <button class="btn" id="connectBtn" onclick="openWalletModal()">CONNECT WALLET</button>
 </nav>
 
-<!-- HERO -->
 <section class="hero">
   <div class="hero-content">
-    <div class="hero-badge">⚡ POWERED BY ATSAWIN AI</div>
-    <h1>
-      <span class="line1">YIELD FARMING</span>
-      <span class="line2">REIMAGINED</span>
-    </h1>
+    <div class="badge">⚡ POWERED BY ATSAWIN AI</div>
+    <h1><span class="l1">YIELD FARMING</span><span class="l2">REIMAGINED</span></h1>
     <p>AI-driven DeFi protocol with real-time trading signals, automated yield optimization, and institutional-grade risk management.</p>
-    <div class="hero-buttons">
-      <button class="btn-primary" onclick="document.getElementById('pools').scrollIntoView({behavior:'smooth'})">
-        START FARMING
-      </button>
-      <button class="btn-secondary" onclick="document.getElementById('signals').scrollIntoView({behavior:'smooth'})">
-        VIEW SIGNALS
-      </button>
+    <div class="hero-btns">
+      <button class="btn-primary" onclick="document.getElementById('pools').scrollIntoView({behavior:'smooth'})">START FARMING</button>
+      <button class="btn-secondary" onclick="document.getElementById('signals').scrollIntoView({behavior:'smooth'})">VIEW SIGNALS</button>
     </div>
   </div>
 </section>
 
-<!-- LIVE TICKER -->
-<div class="ticker-wrap">
-  <div class="ticker" id="ticker">
-    <!-- Filled by JS -->
-  </div>
-</div>
+<div class="ticker-wrap"><div class="ticker" id="ticker"></div></div>
 
-<!-- LIQUIDITY POOLS -->
 <section id="pools">
-  <div class="section-header">
-    <h2>🏊 LIQUIDITY POOLS</h2>
-    <p>AI-optimized pools with real-time signal-driven yield strategies</p>
-  </div>
-  <div class="pools-grid" id="poolsGrid">
-    <!-- Filled by JS -->
-  </div>
+  <div class="sh"><h2>🏊 LIQUIDITY POOLS</h2><p>AI-optimized pools with real-time signal-driven yield strategies</p></div>
+  <div class="pools-grid" id="poolsGrid"></div>
 </section>
 
-<!-- APY CALCULATOR -->
-<section id="calculator" class="calculator-section">
-  <div class="section-header">
-    <h2>🧮 APY CALCULATOR</h2>
-    <p>Calculate your potential earnings with AI-optimized yields</p>
-  </div>
-  <div class="calc-container">
+<section id="calculator" class="calc-section">
+  <div class="sh"><h2>🧮 APY CALCULATOR</h2><p>Calculate your potential earnings with AI-optimized yields</p></div>
+  <div class="calc-wrap">
     <div class="calc-card">
       <div class="calc-row">
-        <div class="calc-field">
-          <label>Select Pool</label>
-          <select id="calcPool" onchange="updateCalc()">
-            <option value="btc">BTC/USDT</option>
-            <option value="eth">ETH/USDT</option>
-            <option value="bnb">BNB/USDT</option>
-            <option value="sol">SOL/USDT</option>
-            <option value="xau">XAU/USDT</option>
-          </select>
-        </div>
-        <div class="calc-field">
-          <label>APY (%)</label>
-          <input type="text" id="calcApy" value="24.5%" readonly>
-        </div>
+        <div class="cf"><label>Select Pool</label><select id="calcPool" onchange="updateCalc()">
+          <option value="btc">BTC/USDT</option><option value="eth">ETH/USDT</option>
+          <option value="bnb">BNB/USDT</option><option value="sol">SOL/USDT</option>
+          <option value="xau">XAU/USDT</option>
+        </select></div>
+        <div class="cf"><label>APY (%)</label><input type="text" id="calcApy" value="24.5%" readonly></div>
       </div>
       <div class="calc-row">
-        <div class="calc-field">
-          <label>Investment Amount (USDT)</label>
-          <input type="number" id="calcAmount" value="10000" min="0" oninput="updateCalc()">
-        </div>
-        <div class="calc-field">
-          <label>Duration (days)</label>
-          <input type="number" id="calcDays" value="365" min="1" oninput="updateCalc()">
-        </div>
+        <div class="cf"><label>Investment Amount (USDT)</label><input type="number" id="calcAmount" value="10000" min="0" oninput="updateCalc()"></div>
+        <div class="cf"><label>Duration (days)</label><input type="number" id="calcDays" value="365" min="1" oninput="updateCalc()"></div>
       </div>
-      <div class="calc-result">
-        <div class="apy-label">Projected APY</div>
-        <div class="apy-value" id="resultApy">24.5%</div>
+      <div class="calc-res">
+        <div class="al">Projected APY</div>
+        <div class="av" id="resultApy">24.5%</div>
         <div class="earnings">
-          <div class="earning-item">
-            <div class="label">Daily Earnings</div>
-            <div class="value" id="dailyEarnings">6.71 USDT</div>
-          </div>
-          <div class="earning-item">
-            <div class="label">Total Earnings</div>
-            <div class="value" id="totalEarnings">2,450.00 USDT</div>
-          </div>
-          <div class="earning-item">
-            <div class="label">Final Balance</div>
-            <div class="value" id="finalBalance">12,450.00 USDT</div>
-          </div>
+          <div class="ei"><div class="l">Daily</div><div class="v" id="dailyEarnings">6.71 USDT</div></div>
+          <div class="ei"><div class="l">Total Earnings</div><div class="v" id="totalEarnings">2,450 USDT</div></div>
+          <div class="ei"><div class="l">Final Balance</div><div class="v" id="finalBalance">12,450 USDT</div></div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- LIVE SIGNALS -->
 <section id="signals">
-  <div class="section-header">
-    <h2>📡 LIVE AI SIGNALS</h2>
-    <p>Real-time composite signals from 6 AI trading strategies</p>
-  </div>
+  <div class="sh"><h2>📡 LIVE AI SIGNALS</h2><p>Real-time composite signals from 6 AI trading strategies</p></div>
   <div class="signal-board">
     <div class="chart-card">
-      <table class="signal-table">
-        <thead>
-          <tr>
-            <th>PAIR</th>
-            <th>PRICE</th>
-            <th>24H</th>
-            <th>SIGNAL</th>
-            <th>CONFIDENCE</th>
-            <th>STRATEGIES</th>
-          </tr>
-        </thead>
-        <tbody id="signalTable">
-          <!-- Filled by JS -->
-        </tbody>
+      <table class="st"><thead><tr><th>PAIR</th><th>PRICE</th><th>SIGNAL</th><th>CONFIDENCE</th><th>CONSENSUS</th></tr></thead>
+      <tbody id="signalTable"><tr><td colspan="5" class="loading">Loading signals...</td></tr></tbody>
       </table>
     </div>
   </div>
 </section>
 
-<!-- PRICE CHART -->
 <section>
-  <div class="section-header">
-    <h2>📈 PRICE CHART</h2>
-    <p>Live market data with AI signal overlay</p>
-  </div>
-  <div class="chart-container">
+  <div class="sh"><h2>📈 PRICE CHART</h2><p>Live market data from Binance</p></div>
+  <div class="chart-wrap">
     <div class="chart-card">
-      <div class="chart-header">
+      <div class="chart-hd">
         <div class="chart-title" id="chartTitle">BTC/USDT</div>
-        <div class="chart-timeframes">
-          <button onclick="setTimeframe('15m')">15M</button>
-          <button onclick="setTimeframe('1h')">1H</button>
-          <button class="active" onclick="setTimeframe('4h')">4H</button>
-          <button onclick="setTimeframe('1d')">1D</button>
+        <div class="chart-tf">
+          <button onclick="setTF('15m')">15M</button><button onclick="setTF('1h')">1H</button>
+          <button class="active" onclick="setTF('4h')">4H</button><button onclick="setTF('1d')">1D</button>
         </div>
       </div>
-      <div class="chart-area">
-        <canvas id="priceChart" class="chart-canvas"></canvas>
-        <div class="chart-tooltip" id="chartTooltip">
-          <div class="price" id="chartPrice">--</div>
-          <div class="change" id="chartChange">--</div>
-        </div>
+      <div class="chart-area"><canvas id="priceChart" class="chart-canvas"></canvas>
+        <div class="chart-tt"><div class="p" id="chartPrice">--</div><div class="c" id="chartChange">--</div></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- TOKENOMICS -->
-<section id="tokenomics" class="tokenomics-section">
-  <div class="section-header">
-    <h2>🪙 TOKENOMICS</h2>
-    <p>ATSAWIN token distribution and protocol metrics</p>
-  </div>
-  <div class="tokenomics-grid">
-    <div class="token-card">
-      <div class="icon">💰</div>
-      <div class="label">Total Supply</div>
-      <div class="value">100M</div>
-      <div class="sub">ATSAWIN tokens</div>
-    </div>
-    <div class="token-card">
-      <div class="icon">🏊</div>
-      <div class="label">TVL</div>
-      <div class="value" id="tvlValue">$47.2M</div>
-      <div class="sub">Total Value Locked</div>
-    </div>
-    <div class="token-card">
-      <div class="icon">📊</div>
-      <div class="label">Avg APY</div>
-      <div class="value" id="avgApy">24.5%</div>
-      <div class="sub">Across all pools</div>
-    </div>
-    <div class="token-card">
-      <div class="icon">👥</div>
-      <div class="label">Holders</div>
-      <div class="value">12,847</div>
-      <div class="sub">Active wallets</div>
-    </div>
-    <div class="token-card">
-      <div class="icon">🔥</div>
-      <div class="label">Burned</div>
-      <div class="value">2.1M</div>
-      <div class="sub">Deflationary mechanism</div>
-    </div>
-    <div class="token-card">
-      <div class="icon">⚡</div>
-      <div class="label">AI Signals</div>
-      <div class="value">24/7</div>
-      <div class="sub">Real-time analysis</div>
-    </div>
+<section id="tokenomics" class="tok-section">
+  <div class="sh"><h2>🪙 TOKENOMICS</h2><p>Protocol metrics and token distribution</p></div>
+  <div class="tok-grid">
+    <div class="tok-card"><div class="ic">💰</div><div class="l">Total Supply</div><div class="v">100M</div><div class="sub">ATSAWIN tokens</div></div>
+    <div class="tok-card"><div class="ic">🏊</div><div class="l">TVL</div><div class="v" id="tvlVal">$47.2M</div><div class="sub">Total Value Locked</div></div>
+    <div class="tok-card"><div class="ic">📊</div><div class="l">Avg APY</div><div class="v" id="avgApy">24.5%</div><div class="sub">Across all pools</div></div>
+    <div class="tok-card"><div class="ic">👥</div><div class="l">Holders</div><div class="v">12,847</div><div class="sub">Active wallets</div></div>
+    <div class="tok-card"><div class="ic">🔥</div><div class="l">Burned</div><div class="v">2.1M</div><div class="sub">Deflationary</div></div>
+    <div class="tok-card"><div class="ic">⚡</div><div class="l">AI Signals</div><div class="v">24/7</div><div class="sub">Real-time</div></div>
   </div>
 </section>
 
-<!-- FOOTER -->
 <footer>
-  <div class="social-links">
-    <a href="#" title="Twitter">𝕏</a>
-    <a href="#" title="Discord">💬</a>
-    <a href="#" title="Telegram">📱</a>
-    <a href="#" title="GitHub">💻</a>
-  </div>
+  <div class="sl"><a href="#">𝕏</a><a href="#">💬</a><a href="#">📱</a><a href="#">💻</a></div>
   <p>© 2026 Atsawin DeFi Protocol. Powered by Atsawin AI Operating System.</p>
-  <p style="margin-top:10px;font-size:0.8em;color:#333;">Real-time signals from 6 AI strategies • Risk management included</p>
 </footer>
 
 <!-- WALLET MODAL -->
 <div class="modal-overlay" id="walletModal">
   <div class="modal">
-    <button class="modal-close" onclick="closeWalletModal()">✕</button>
+    <button class="modal-close" onclick="closeModal('walletModal')">✕</button>
     <h3>Connect Wallet</h3>
     <p>Connect your wallet to start earning AI-optimized yields</p>
-    <div class="wallet-options">
-      <div class="wallet-option" onclick="connectWallet('metamask')">
-        <div class="wallet-icon" style="background:linear-gradient(135deg,#f6851b,#e2761b);">🦊</div>
-        <div class="wallet-name">MetaMask</div>
-        <span style="color:var(--text-dim)">→</span>
-      </div>
-      <div class="wallet-option" onclick="connectWallet('walletconnect')">
-        <div class="wallet-icon" style="background:linear-gradient(135deg,#3b99fc,#2580d5);">🔗</div>
-        <div class="wallet-name">WalletConnect</div>
-        <span style="color:var(--text-dim)">→</span>
-      </div>
-      <div class="wallet-option" onclick="connectWallet('coinbase')">
-        <div class="wallet-icon" style="background:linear-gradient(135deg,#0052ff,#0041cc);">🔵</div>
-        <div class="wallet-name">Coinbase Wallet</div>
-        <span style="color:var(--text-dim)">→</span>
-      </div>
-      <div class="wallet-option" onclick="connectWallet('trust')">
-        <div class="wallet-icon" style="background:linear-gradient(135deg,#3375bb,#2a5fa0);">🛡️</div>
-        <div class="wallet-name">Trust Wallet</div>
-        <span style="color:var(--text-dim)">→</span>
-      </div>
+    <div class="wallet-opts">
+      <div class="wallet-opt" onclick="connectWallet('metamask')"><div class="wi" style="background:linear-gradient(135deg,#f6851b,#e2761b)">🦊</div><div class="wn">MetaMask</div><span style="color:var(--td)">→</span></div>
+      <div class="wallet-opt" onclick="connectWallet('walletconnect')"><div class="wi" style="background:linear-gradient(135deg,#3b99fc,#2580d5)">🔗</div><div class="wn">WalletConnect</div><span style="color:var(--td)">→</span></div>
+      <div class="wallet-opt" onclick="connectWallet('coinbase')"><div class="wi" style="background:linear-gradient(135deg,#0052ff,#0041cc)">🔵</div><div class="wn">Coinbase Wallet</div><span style="color:var(--td)">→</span></div>
+      <div class="wallet-opt" onclick="connectWallet('trust')"><div class="wi" style="background:linear-gradient(135deg,#3375bb,#2a5fa0)">🛡️</div><div class="wn">Trust Wallet</div><span style="color:var(--td)">→</span></div>
     </div>
   </div>
 </div>
 
+<!-- STAKE MODAL -->
+<div class="modal-overlay" id="stakeModal">
+  <div class="modal stake-modal">
+    <button class="modal-close" onclick="closeModal('stakeModal')">✕</button>
+    <h3>Stake <span id="stakePair">BTC/USDT</span></h3>
+    <p>Deposit into the AI-optimized yield pool</p>
+    <div class="stake-form">
+      <div class="cf"><label>Amount (USDT)</label><input type="number" id="stakeAmount" value="1000" min="10" oninput="updateStakeSummary()"></div>
+      <div class="cf"><label>Lock Period</label><select id="stakeLock" onchange="updateStakeSummary()">
+        <option value="30">30 days (1.0x)</option><option value="90">90 days (1.5x)</option>
+        <option value="180">180 days (2.0x)</option><option value="365">365 days (3.0x)</option>
+      </select></div>
+    </div>
+    <div class="stake-summary" id="stakeSummary">
+      <div class="row"><span>APY</span><span id="stakeApy">24.5%</span></div>
+      <div class="row"><span>Lock Multiplier</span><span id="stakeMult">1.0x</span></div>
+      <div class="row"><span>Est. Earnings</span><span id="stakeEarnings">67.12 USDT</span></div>
+      <div class="row"><span>Total at Unlock</span><span id="stakeTotal">1,067.12 USDT</span></div>
+    </div>
+    <div style="margin-top:20px;display:flex;gap:10px">
+      <button class="btn-primary" style="flex:1" id="stakeBtn" onclick="executeStake()">STAKE NOW</button>
+      <button class="btn-secondary" style="flex:1" onclick="closeModal('stakeModal')">CANCEL</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
 <script>
-// ══════════════════════════════════════════════════════════════
-// CONFIG
-// ══════════════════════════════════════════════════════════════
-const API_URL = window.location.origin; // Same origin as the page
-
-const POOLS = [
-  { pair: 'BTC/USDT', symbol: 'BTCUSDT', apy: 24.5, tvl: 18200000, icon1: '₿', icon2: '₮', color1: '#f7931a', color2: '#26a17b' },
-  { pair: 'ETH/USDT', symbol: 'ETHUSDT', apy: 19.8, tvl: 12400000, icon1: 'Ξ', icon2: '₮', color1: '#627eea', color2: '#26a17b' },
-  { pair: 'BNB/USDT', symbol: 'BNBUSDT', apy: 32.1, tvl: 8700000, icon1: 'B', icon2: '₮', color1: '#f3ba2f', color2: '#26a17b' },
-  { pair: 'SOL/USDT', symbol: 'SOLUSDT', apy: 41.3, tvl: 5300000, icon1: 'S', icon2: '₮', color1: '#9945ff', color2: '#26a17b' },
-  { pair: 'XAU/USDT', symbol: 'XAUUSDT', apy: 15.2, tvl: 2600000, icon1: 'Au', icon2: '₮', color1: '#ffd700', color2: '#26a17b' },
+const API=window.location.origin;
+const POOLS=[
+  {pair:'BTC/USDT',sym:'BTCUSDT',apy:24.5,tvl:18200000,i1:'₿',i2:'₮',c1:'#f7931a',c2:'#26a17b'},
+  {pair:'ETH/USDT',sym:'ETHUSDT',apy:19.8,tvl:12400000,i1:'Ξ',i2:'₮',c1:'#627eea',c2:'#26a17b'},
+  {pair:'BNB/USDT',sym:'BNBUSDT',apy:32.1,tvl:8700000,i1:'B',i2:'₮',c1:'#f3ba2f',c2:'#26a17b'},
+  {pair:'SOL/USDT',sym:'SOLUSDT',apy:41.3,tvl:5300000,i1:'S',i2:'₮',c1:'#9945ff',c2:'#26a17b'},
+  {pair:'XAU/USDT',sym:'XAUUSDT',apy:15.2,tvl:2600000,i1:'Au',i2:'₮',c1:'#ffd700',c2:'#26a17b'},
 ];
+const SMETA={BTCUSDT:{icon:'₿',color:'#f7931a',name:'BTC'},ETHUSDT:{icon:'Ξ',color:'#627eea',name:'ETH'},BNBUSDT:{icon:'B',color:'#f3ba2f',name:'BNB'},SOLUSDT:{icon:'S',color:'#9945ff',name:'SOL'},XRPUSDT:{icon:'X',color:'#23292f',name:'XRP'}};
+const poolApys={btc:24.5,eth:19.8,bnb:32.1,sol:41.3,xau:15.2};
+const lockMults={30:1.0,90:1.5,180:2.0,365:3.0};
+let liveData={},chartData=[],currentTF='4h',selectedPool=null;
+let walletConnected=false,walletAddress='';
 
-// ══════════════════════════════════════════════════════════════
-// PARTICLES
-// ══════════════════════════════════════════════════════════════
-function createParticles() {
-  const container = document.getElementById('particles');
-  for (let i = 0; i < 30; i++) {
-    const p = document.createElement('div');
-    p.className = 'particle';
-    p.style.left = Math.random() * 100 + '%';
-    p.style.animationDelay = Math.random() * 15 + 's';
-    p.style.animationDuration = (10 + Math.random() * 10) + 's';
-    if (Math.random() > 0.5) p.style.background = 'var(--neon-magenta)';
-    container.appendChild(p);
+// Particles
+(function(){const c=document.getElementById('particles');for(let i=0;i<30;i++){const p=document.createElement('div');p.className='particle';p.style.left=Math.random()*100+'%';p.style.animationDelay=Math.random()*15+'s';p.style.animationDuration=(10+Math.random()*10)+'s';if(Math.random()>.5)p.style.background='var(--m)';c.appendChild(p)}})();
+
+// Toast
+function showToast(msg,type='info'){
+  const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+type;
+  setTimeout(()=>t.classList.remove('show'),4000);
+}
+
+// Modals
+function openWalletModal(){document.getElementById('walletModal').classList.add('active')}
+function closeModal(id){document.getElementById(id).classList.remove('active')}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('active')}));
+
+// Wallet Connect
+async function connectWallet(type){
+  closeModal('walletModal');
+  if(type==='metamask'){
+    if(typeof window.ethereum!=='undefined'){
+      try{
+        const accounts=await window.ethereum.request({method:'eth_requestAccounts'});
+        walletAddress=accounts[0];walletConnected=true;
+        const btn=document.getElementById('connectBtn');
+        btn.textContent=walletAddress.slice(0,6)+'...'+walletAddress.slice(-4);
+        btn.classList.add('connected');btn.onclick=null;
+        showToast('Wallet connected: '+walletAddress.slice(0,10)+'...','success');
+        return;
+      }catch(e){showToast('MetaMask connection rejected','error');return;}
+    }else{
+      showToast('MetaMask not detected — installing...','info');
+      window.open('https://metamask.io/download/','_blank');
+      return;
+    }
   }
+  // Other wallets — show coming soon
+  showToast(type+' integration coming soon!','info');
 }
-createParticles();
 
-// ══════════════════════════════════════════════════════════════
-// WALLET MODAL
-// ══════════════════════════════════════════════════════════════
-function openWalletModal() {
-  document.getElementById('walletModal').classList.add('active');
-}
-function closeWalletModal() {
-  document.getElementById('walletModal').classList.remove('active');
-}
-function connectWallet(name) {
-  closeWalletModal();
-  const btn = document.getElementById('connectBtn');
-  btn.textContent = '0x7a3...f9e2';
-  btn.classList.add('connected');
-  btn.onclick = null;
-}
-document.getElementById('walletModal').addEventListener('click', function(e) {
-  if (e.target === this) closeWalletModal();
-});
-
-// ══════════════════════════════════════════════════════════════
-// APY CALCULATOR
-// ══════════════════════════════════════════════════════════════
-const poolApys = { btc: 24.5, eth: 19.8, bnb: 32.1, sol: 41.3, xau: 15.2 };
-
-function updateCalc() {
-  const pool = document.getElementById('calcPool').value;
-  const apy = poolApys[pool];
-  const amount = parseFloat(document.getElementById('calcAmount').value) || 0;
-  const days = parseInt(document.getElementById('calcDays').value) || 1;
-
-  document.getElementById('calcApy').value = apy + '%';
-
-  const dailyRate = apy / 100 / 365;
-  const dailyEarnings = amount * dailyRate;
-  const totalEarnings = dailyEarnings * days;
-  const finalBalance = amount + totalEarnings;
-
-  document.getElementById('resultApy').textContent = apy + '%';
-  document.getElementById('dailyEarnings').textContent = dailyEarnings.toFixed(2) + ' USDT';
-  document.getElementById('totalEarnings').textContent = totalEarnings.toFixed(2) + ' USDT';
-  document.getElementById('finalBalance').textContent = finalBalance.toFixed(2) + ' USDT';
+// Calculator
+function updateCalc(){
+  const pool=document.getElementById('calcPool').value;
+  const apy=poolApys[pool];const amt=parseFloat(document.getElementById('calcAmount').value)||0;
+  const days=parseInt(document.getElementById('calcDays').value)||1;
+  document.getElementById('calcApy').value=apy+'%';
+  const daily=amt*(apy/100/365);const total=daily*days;
+  document.getElementById('resultApy').textContent=apy+'%';
+  document.getElementById('dailyEarnings').textContent=daily.toFixed(2)+' USDT';
+  document.getElementById('totalEarnings').textContent=total.toFixed(2)+' USDT';
+  document.getElementById('finalBalance').textContent=(amt+total).toFixed(2)+' USDT';
 }
 updateCalc();
 
-// ══════════════════════════════════════════════════════════════
-// FETCH REAL DATA FROM API
-// ══════════════════════════════════════════════════════════════
-let liveData = {};
-
-async function fetchSignals() {
-  const symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT'];
-  const results = {};
-
-  for (const sym of symbols) {
-    try {
-      const res = await fetch(`${API_URL}/trading/analysis/signal?symbol=${sym}&timeframe=1h`);
-      if (res.ok) {
-        const data = await res.json();
-        results[sym] = {
-          price: 0,
-          change: 0,
-          signal: data.signal || 'hold',
-          confidence: data.confidence || 0,
-          consensus: data.consensus || '',
-        };
-      }
-    } catch(e) {
-      console.warn('Signal fetch failed for', sym, e);
-    }
-  }
-
-  // Also fetch prices
-  for (const sym of symbols) {
-    try {
-      const res = await fetch(`${API_URL}/trading/market/price?symbol=${sym}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (results[sym]) {
-          results[sym].price = data.price || 0;
-        }
-      }
-    } catch(e) {}
-  }
-
-  return results;
+// Stake
+function openStakeModal(poolIdx){
+  if(!walletConnected){openWalletModal();showToast('Please connect wallet first','error');return;}
+  selectedPool=POOLS[poolIdx];
+  document.getElementById('stakePair').textContent=selectedPool.pair;
+  updateStakeSummary();
+  document.getElementById('stakeModal').classList.add('active');
+}
+function updateStakeSummary(){
+  if(!selectedPool)return;
+  const amt=parseFloat(document.getElementById('stakeAmount').value)||0;
+  const lock=parseInt(document.getElementById('stakeLock').value);
+  const mult=lockMults[lock]||1;
+  const effectiveApy=selectedPool.apy*mult;
+  const earnings=amt*(effectiveApy/100)*(lock/365);
+  document.getElementById('stakeApy').textContent=effectiveApy.toFixed(1)+'%';
+  document.getElementById('stakeMult').textContent=mult.toFixed(1)+'x';
+  document.getElementById('stakeEarnings').textContent=earnings.toFixed(2)+' USDT';
+  document.getElementById('stakeTotal').textContent=(amt+earnings).toFixed(2)+' USDT';
+}
+async function executeStake(){
+  const amt=parseFloat(document.getElementById('stakeAmount').value)||0;
+  if(amt<10){showToast('Minimum stake is 10 USDT','error');return;}
+  const btn=document.getElementById('stakeBtn');btn.disabled=true;btn.textContent='PROCESSING...';
+  // Simulate blockchain tx
+  await new Promise(r=>setTimeout(r,2000));
+  closeModal('stakeModal');
+  showToast('✅ Staked '+amt+' USDT in '+selectedPool.pair+' pool!','success');
+  btn.disabled=false;btn.textContent='STAKE NOW';
 }
 
-// ══════════════════════════════════════════════════════════════
-// RENDER POOLS
-// ══════════════════════════════════════════════════════════════
-function renderPools(signals) {
-  const grid = document.getElementById('poolsGrid');
-  grid.innerHTML = POOLS.map(pool => {
-    const sig = signals[pool.symbol] || { signal: 'hold', confidence: 0 };
-    const signalClass = sig.signal === 'buy' ? 'buy' : sig.signal === 'sell' ? 'sell' : 'hold';
-    const signalText = sig.signal.toUpperCase();
+// Fetch real data
+async function fetchData(){
+  const syms=['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT'];
+  for(const sym of syms){
+    try{
+      const sr=await fetch(API+'/api/signal/'+sym+'?timeframe=1h');
+      if(sr.ok){const d=await sr.json();if(!liveData[sym])liveData[sym]={};liveData[sym].signal=d.signal||'hold';liveData[sym].confidence=d.confidence||0;liveData[sym].consensus=d.consensus||''}
+    }catch(e){}
+    try{
+      const pr=await fetch(API+'/api/price/'+sym);
+      if(pr.ok){const d=await pr.json();if(!liveData[sym])liveData[sym]={};liveData[sym].price=d.price||0}
+    }catch(e){}
+  }
+  // Also fetch klines for chart
+  try{
+    const kr=await fetch(API+'/api/klines/BTCUSDT?timeframe='+currentTF.toLowerCase()+'&limit=100');
+    if(kr.ok){const d=await kr.json();if(d.data)chartData=d.data.map(c=>({time:c.timestamp,price:c.close}))}
+  }catch(e){}
+  renderAll();
+}
 
-    return `
-      <div class="pool-card">
-        <div class="pool-header">
-          <div class="pool-pair">
-            <div class="icons">
-              <div class="icon" style="background:linear-gradient(135deg,${pool.color1},${pool.color2});">${pool.icon1}</div>
-              <div class="icon" style="background:linear-gradient(135deg,${pool.color2},${pool.color1});">${pool.icon2}</div>
-            </div>
-            <div class="name">${pool.pair}</div>
-          </div>
-          <div class="pool-apy">${pool.apy}%</div>
-        </div>
-        <div class="pool-stats">
-          <div class="pool-stat">
-            <div class="label">TVL</div>
-            <div class="value">$${(pool.tvl / 1e6).toFixed(1)}M</div>
-          </div>
-          <div class="pool-stat">
-            <div class="label">APY</div>
-            <div class="value" style="color:var(--neon-green)">${pool.apy}%</div>
-          </div>
-        </div>
-        <div class="pool-signal">
-          <span class="signal-badge ${signalClass}">${signalText}</span>
-          <span class="confidence">Confidence: <span>${(sig.confidence * 100).toFixed(0)}%</span></span>
-        </div>
-        <button class="btn-stake">STAKE NOW</button>
-      </div>
-    `;
+function renderAll(){
+  renderPools();renderSignals();renderTicker();drawChart();
+}
+
+function renderPools(){
+  document.getElementById('poolsGrid').innerHTML=POOLS.map((p,i)=>{
+    const s=liveData[p.symbol]||{signal:'hold',confidence:0};
+    const sc=s.signal==='buy'?'b':s.signal==='sell'?'s':'h';
+    const st=s.signal.toUpperCase();
+    return `<div class="pool">
+      <div class="pool-hd"><div class="pool-pair"><div class="icons"><div class="ic" style="background:linear-gradient(135deg,${p.c1},${p.c2})">${p.i1}</div><div class="ic" style="background:linear-gradient(135deg,${p.c2},${p.c1})">${p.i2}</div></div><div class="nm">${p.pair}</div></div><div class="pool-apy">${p.apy}%</div></div>
+      <div class="pool-stats"><div><div class="l">TVL</div><div class="v">$${(p.tvl/1e6).toFixed(1)}M</div></div><div><div class="l">APY</div><div class="v" style="color:var(--g)">${p.apy}%</div></div></div>
+      <div class="pool-sig"><span class="sb ${sc}">${st}</span><span class="conf">Confidence: <span>${(s.confidence*100).toFixed(0)}%</span></span></div>
+      <button class="btn-stake" onclick="openStakeModal(${i})">${walletConnected?'STAKE NOW':'CONNECT TO STAKE'}</button>
+    </div>`;
   }).join('');
 }
 
-// ══════════════════════════════════════════════════════════════
-// RENDER SIGNAL TABLE
-// ══════════════════════════════════════════════════════════════
-const SYMBOL_META = {
-  BTCUSDT: { icon: '₿', color: '#f7931a', name: 'BTC' },
-  ETHUSDT: { icon: 'Ξ', color: '#627eea', name: 'ETH' },
-  BNBUSDT: { icon: 'B', color: '#f3ba2f', name: 'BNB' },
-  SOLUSDT: { icon: 'S', color: '#9945ff', name: 'SOL' },
-  XRPUSDT: { icon: 'X', color: '#23292f', name: 'XRP' },
-};
-
-function renderSignalTable(signals) {
-  const tbody = document.getElementById('signalTable');
-  const symbols = Object.keys(signals);
-
-  if (symbols.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:30px;">Loading signals...</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = symbols.map(sym => {
-    const s = signals[sym];
-    const meta = SYMBOL_META[sym] || { icon: '?', color: '#666', name: sym };
-    const signalClass = s.signal === 'buy' ? 'buy' : s.signal === 'sell' ? 'sell' : 'hold';
-    const signalText = s.signal.toUpperCase();
-    const priceStr = s.price > 0 ? '$' + s.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
-    const confStr = (s.confidence * 100).toFixed(0) + '%';
-
-    return `
-      <tr>
-        <td>
-          <div class="symbol-cell">
-            <div class="symbol-icon" style="background:${meta.color}">${meta.icon}</div>
-            <span>${meta.name}/USDT</span>
-          </div>
-        </td>
-        <td>${priceStr}</td>
-        <td style="color:var(--text-dim)">--</td>
-        <td><span class="badge ${signalClass}">${signalText}</span></td>
-        <td style="color:var(--neon-cyan)">${confStr}</td>
-        <td style="color:var(--text-dim);font-size:0.9em">6 strategies</td>
-      </tr>
-    `;
+function renderSignals(){
+  const tbody=document.getElementById('signalTable');
+  const syms=Object.keys(liveData);
+  if(!syms.length){tbody.innerHTML='<tr><td colspan="5" class="loading">Loading signals...</td></tr>';return;}
+  tbody.innerHTML=syms.map(sym=>{
+    const s=liveData[sym];const m=SMETA[sym]||{icon:'?',color:'#666',name:sym};
+    const sc=s.signal==='buy'?'b':s.signal==='sell'?'s':'h';
+    const price=s.price>0?'$'+s.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'--';
+    return `<tr><td><div class="sc"><div class="si" style="background:${m.color}">${m.icon}</div><span>${m.name}/USDT</span></div></td>
+    <td>${price}</td><td><span class="badge ${sc}">${s.signal.toUpperCase()}</span></td>
+    <td style="color:var(--c)">${(s.confidence*100).toFixed(0)}%</td><td style="color:var(--td)">${s.consensus||'--'}</td></tr>`;
   }).join('');
 }
 
-// ══════════════════════════════════════════════════════════════
-// RENDER TICKER
-// ══════════════════════════════════════════════════════════════
-function renderTicker(signals) {
-  const ticker = document.getElementById('ticker');
-  const symbols = Object.keys(signals);
-
-  if (symbols.length === 0) return;
-
-  const items = symbols.map(sym => {
-    const s = signals[sym];
-    const meta = SYMBOL_META[sym] || { name: sym };
-    const signalClass = s.signal === 'buy' ? 'buy' : s.signal === 'sell' ? 'sell' : 'hold';
-    const priceStr = s.price > 0 ? '$' + s.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
-
-    return `
-      <div class="ticker-item">
-        <span class="symbol">${meta.name}</span>
-        <span class="price">${priceStr}</span>
-        <span class="signal ${signalClass}">${s.signal.toUpperCase()}</span>
-        <span class="confidence" style="color:var(--text-dim)">${(s.confidence * 100).toFixed(0)}%</span>
-      </div>
-      <div class="ticker-item"><span class="divider">│</span></div>
-    `;
+function renderTicker(){
+  const t=document.getElementById('ticker');const syms=Object.keys(liveData);
+  if(!syms.length)return;
+  const items=syms.map(sym=>{
+    const s=liveData[sym];const m=SMETA[sym]||{name:sym};
+    const sc=s.signal==='buy'?'b':s.signal==='sell'?'s':'h';
+    const price=s.price>0?'$'+s.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'--';
+    return `<div class="ti"><span class="s">${m.name}</span><span class="p">${price}</span><span class="sig ${sc}">${s.signal.toUpperCase()}</span></div><div class="ti"><span style="color:var(--border)">│</span></div>`;
   }).join('');
-
-  // Duplicate for seamless loop
-  ticker.innerHTML = items + items;
+  t.innerHTML=items+items;
 }
 
-// ══════════════════════════════════════════════════════════════
-// PRICE CHART (Canvas)
-// ══════════════════════════════════════════════════════════════
-let chartData = [];
-let currentTimeframe = '4h';
+// Chart
+function setTF(tf){currentTF=tf;document.querySelectorAll('.chart-tf button').forEach(b=>b.classList.remove('active'));event.target.classList.add('active');fetchData()}
 
-function generateChartData() {
-  // Generate realistic-looking price data
-  const points = 100;
-  const data = [];
-  let price = 67000 + Math.random() * 5000;
-
-  for (let i = 0; i < points; i++) {
-    price += (Math.random() - 0.48) * price * 0.005;
-    data.push({
-      time: new Date(Date.now() - (points - i) * 4 * 3600000),
-      price: price,
-    });
+function drawChart(){
+  const canvas=document.getElementById('priceChart');const ctx=canvas.getContext('2d');
+  canvas.width=canvas.offsetWidth*2;canvas.height=canvas.offsetHeight*2;ctx.scale(2,2);
+  const w=canvas.offsetWidth,h=canvas.offsetHeight;
+  const pad={t:20,r:20,b:30,l:60};
+  ctx.clearRect(0,0,w,h);
+  if(chartData.length<2)return;
+  const prices=chartData.map(d=>d.price);
+  const min=Math.min(...prices)*.999,max=Math.max(...prices)*1.001,range=max-min;
+  const cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
+  // Grid
+  ctx.strokeStyle='rgba(26,26,58,.5)';ctx.lineWidth=.5;
+  for(let i=0;i<=5;i++){const y=pad.t+(ch/5)*i;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();
+    const price=max-(range/5)*i;ctx.fillStyle='#6666aa';ctx.font='10px "Share Tech Mono"';ctx.textAlign='right';
+    ctx.fillText('$'+price.toLocaleString(undefined,{maximumFractionDigits:0}),pad.l-5,y+3);
   }
-  return data;
+  // Gradient
+  const grad=ctx.createLinearGradient(0,pad.t,0,h-pad.b);
+  grad.addColorStop(0,'rgba(0,240,255,.15)');grad.addColorStop(1,'rgba(0,240,255,0)');
+  ctx.beginPath();
+  chartData.forEach((d,i)=>{const x=pad.l+(i/(chartData.length-1))*cw;const y=pad.t+((max-d.price)/range)*ch;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+  ctx.lineTo(pad.l+cw,h-pad.b);ctx.lineTo(pad.l,h-pad.b);ctx.closePath();ctx.fillStyle=grad;ctx.fill();
+  // Line
+  ctx.beginPath();
+  chartData.forEach((d,i)=>{const x=pad.l+(i/(chartData.length-1))*cw;const y=pad.t+((max-d.price)/range)*ch;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)});
+  ctx.strokeStyle='#00f0ff';ctx.lineWidth=2;ctx.shadowColor='#00f0ff';ctx.shadowBlur=10;ctx.stroke();ctx.shadowBlur=0;
+  // Dot
+  const last=chartData[chartData.length-1];const lx=pad.l+cw;const ly=pad.t+((max-last.price)/range)*ch;
+  ctx.beginPath();ctx.arc(lx,ly,4,0,Math.PI*2);ctx.fillStyle='#00f0ff';ctx.fill();
+  ctx.beginPath();ctx.arc(lx,ly,8,0,Math.PI*2);ctx.strokeStyle='rgba(0,240,255,.3)';ctx.lineWidth=2;ctx.stroke();
+  // Tooltip
+  document.getElementById('chartPrice').textContent='$'+last.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const change=chartData.length>1?((last.price/chartData[0].price)-1)*100:0;
+  const ce=document.getElementById('chartChange');ce.textContent=(change>=0?'+':'')+change.toFixed(2)+'%';ce.className='c '+(change>=0?'u':'d');
 }
 
-function drawChart() {
-  const canvas = document.getElementById('priceChart');
-  const ctx = canvas.getContext('2d');
-
-  // Set canvas size
-  canvas.width = canvas.offsetWidth * 2;
-  canvas.height = canvas.offsetHeight * 2;
-  ctx.scale(2, 2);
-
-  const w = canvas.offsetWidth;
-  const h = canvas.offsetHeight;
-  const padding = { top: 20, right: 20, bottom: 30, left: 60 };
-
-  // Clear
-  ctx.clearRect(0, 0, w, h);
-
-  if (chartData.length < 2) return;
-
-  const prices = chartData.map(d => d.price);
-  const minPrice = Math.min(...prices) * 0.999;
-  const maxPrice = Math.max(...prices) * 1.001;
-  const priceRange = maxPrice - minPrice;
-
-  const chartW = w - padding.left - padding.right;
-  const chartH = h - padding.top - padding.bottom;
-
-  // Grid lines
-  ctx.strokeStyle = 'rgba(26,26,58,0.5)';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i <= 5; i++) {
-    const y = padding.top + (chartH / 5) * i;
-    ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(w - padding.right, y);
-    ctx.stroke();
-
-    // Price labels
-    const price = maxPrice - (priceRange / 5) * i;
-    ctx.fillStyle = '#6666aa';
-    ctx.font = '10px "Share Tech Mono"';
-    ctx.textAlign = 'right';
-    ctx.fillText('$' + price.toLocaleString(undefined, {maximumFractionDigits: 0}), padding.left - 5, y + 3);
-  }
-
-  // Gradient fill
-  const gradient = ctx.createLinearGradient(0, padding.top, 0, h - padding.bottom);
-  gradient.addColorStop(0, 'rgba(0,240,255,0.15)');
-  gradient.addColorStop(1, 'rgba(0,240,255,0)');
-
-  // Draw area
-  ctx.beginPath();
-  chartData.forEach((d, i) => {
-    const x = padding.left + (i / (chartData.length - 1)) * chartW;
-    const y = padding.top + ((maxPrice - d.price) / priceRange) * chartH;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.lineTo(padding.left + chartW, h - padding.bottom);
-  ctx.lineTo(padding.left, h - padding.bottom);
-  ctx.closePath();
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  // Draw line
-  ctx.beginPath();
-  chartData.forEach((d, i) => {
-    const x = padding.left + (i / (chartData.length - 1)) * chartW;
-    const y = padding.top + ((maxPrice - d.price) / priceRange) * chartH;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = '#00f0ff';
-  ctx.lineWidth = 2;
-  ctx.shadowColor = '#00f0ff';
-  ctx.shadowBlur = 10;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // Last point dot
-  const last = chartData[chartData.length - 1];
-  const lastX = padding.left + chartW;
-  const lastY = padding.top + ((maxPrice - last.price) / priceRange) * chartH;
-
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
-  ctx.fillStyle = '#00f0ff';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 8, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0,240,255,0.3)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Update tooltip
-  document.getElementById('chartPrice').textContent = '$' + last.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  const change = chartData.length > 1 ? ((last.price / chartData[0].price) - 1) * 100 : 0;
-  const changeEl = document.getElementById('chartChange');
-  changeEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
-  changeEl.className = 'change ' + (change >= 0 ? 'up' : 'down');
-}
-
-function setTimeframe(tf) {
-  currentTimeframe = tf;
-  document.querySelectorAll('.chart-timeframes button').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
-  chartData = generateChartData();
-  drawChart();
-}
-
-// ══════════════════════════════════════════════════════════════
-// MAIN: FETCH & RENDER
-// ══════════════════════════════════════════════════════════════
-async function loadAll() {
-  const signals = await fetchSignals();
-  liveData = signals;
-
-  renderPools(signals);
-  renderSignalTable(signals);
-  renderTicker(signals);
-
-  chartData = generateChartData();
-  drawChart();
-}
-
-// Initial load
-loadAll();
-
-// Refresh every 30 seconds
-setInterval(loadAll, 30000);
-
-// Redraw chart on window resize
-window.addEventListener('resize', () => drawChart());
+// Init
+fetchData();setInterval(fetchData,30000);
+window.addEventListener('resize',()=>drawChart());
 </script>
-
 </body>
 </html>

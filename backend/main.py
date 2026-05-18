@@ -352,6 +352,61 @@ def defi_landing():
     return "<h1>DeFi Landing Page — Coming Soon</h1>"
 
 
+# ─── PUBLIC API FOR FRONTEND (no auth required) ───────────────
+
+@app.get("/api/price/{symbol}")
+async def public_price(symbol: str):
+    """Get current price for a symbol (public)."""
+    from trading.market_data import get_current_price
+    try:
+        price = await get_current_price(symbol.upper())
+        return {"symbol": symbol.upper(), "price": price}
+    except Exception as e:
+        return {"symbol": symbol.upper(), "price": 0, "error": str(e)}
+
+
+@app.get("/api/signal/{symbol}")
+async def public_signal(symbol: str, timeframe: str = "1h"):
+    """Get trading signal for a symbol (public)."""
+    from trading.analysis import get_signal
+    try:
+        sig = await get_signal(symbol.upper(), timeframe)
+        return {
+            "symbol": symbol.upper(),
+            "timeframe": timeframe,
+            "signal": sig.signal.value,
+            "confidence": round(sig.confidence, 3),
+            "consensus": sig.indicators_summary.get("consensus", ""),
+        }
+    except Exception as e:
+        return {"symbol": symbol.upper(), "signal": "hold", "confidence": 0, "error": str(e)}
+
+
+@app.get("/api/klines/{symbol}")
+async def public_klines(symbol: str, timeframe: str = "4h", limit: int = 100):
+    """Get candlestick data for a symbol (public)."""
+    from trading.market_data import get_klines
+    try:
+        candles = await get_klines(symbol.upper(), timeframe, limit)
+        return {
+            "symbol": symbol.upper(),
+            "timeframe": timeframe,
+            "data": [
+                {
+                    "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, 'isoformat') else str(c.timestamp),
+                    "open": c.open,
+                    "high": c.high,
+                    "low": c.low,
+                    "close": c.close,
+                    "volume": c.volume,
+                }
+                for c in candles
+            ],
+        }
+    except Exception as e:
+        return {"symbol": symbol.upper(), "data": [], "error": str(e)}
+
+
 @app.get("/health")
 def health():
     return {
