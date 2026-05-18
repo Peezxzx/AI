@@ -343,11 +343,12 @@ body {{
 @app.get("/defi", response_class=HTMLResponse)
 def defi_landing():
     """DeFi Yield Farming Landing Page."""
-    import os
-    frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html")
-    if os.path.exists(frontend_path):
-        with open(frontend_path, "r", encoding="utf-8") as f:
-            return f.read()
+    frontend_path = "/root/Atsawin-AI-Core/frontend/index.html"
+    alt_path = "/root/AI/frontend/index.html"
+    for p in [frontend_path, alt_path]:
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return f.read()
     return "<h1>DeFi Landing Page — Coming Soon</h1>"
 
 
