@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: atsawin-postgres
+    environment:
+      POSTGRES_DB: atsawin_ai
+      POSTGRES_USER: atsawin
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - atsawin-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: atsawin-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - atsawin-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # FastAPI Backend
+  backend:
+    image: atsawin-backend:latest
+    container_name: atsawin-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://atsawin:password123@postgres:5432/atsawin_ai
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - atsawin-network
+    restart: unless-stopped
+
+  # Telegram Bot
+  telegram-bot:
+    image: atsawin-backend:latest
+    container_name: atsawin-telegram-bot
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - BACKEND_URL=http://backend:8000
+      - ADMIN_USER_ID=${ADMIN_USER_ID:-}
+    depends_on:
+      - backend
+    networks:
+      - atsawin-network
+    restart: unless-stopped
+    command: python telegram_bot.py
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  atsawin-network:
+    driver: bridge

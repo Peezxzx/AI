@@ -1,0 +1,18 @@
+[Unit]
+Description=Atsawin AI Telegram Bot
+After=network.target atsawin-api.service
+Requires=atsawin-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/Atsawin-AI-Core/backend
+EnvironmentFile=/root/Atsawin-AI-Core/.env
+Environment=BACKEND_URL=http://localhost:8000
+ExecStart=/root/Atsawin-AI-Core/backend/venv/bin/python /root/Atsawin-AI-Core/backend/telegram_bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
