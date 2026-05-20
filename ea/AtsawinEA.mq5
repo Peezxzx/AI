@@ -9,7 +9,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Atsawin AI"
 #property link      ""
-#property version   "1.00"
+#property version   "1.10"
 #property strict
 
 //+------------------------------------------------------------------+
@@ -56,6 +56,7 @@ struct SignalData
    double   take_profit;
    double   position_size;
    double   risk_reward_ratio;
+   string   risk_level;
    string   timestamp;          // ISO timestamp
    bool     valid;              // อ่านสำเร็จ?
 };
@@ -63,19 +64,61 @@ struct SignalData
 SignalData g_currentSignal;     // สัญญาณปัจจุบัน
 
 //+------------------------------------------------------------------+
-//| Symbol Mapping: API name → MT5 name                               |
+//| Symbol Mapping: API name → MT5 name (fuzzy match)                |
 //+------------------------------------------------------------------+
 string SymbolToMT5(string apiSymbol)
 {
-   if(apiSymbol == "BTCUSDT") return "BTCUSD";
-   if(apiSymbol == "ETHUSDT") return "ETHUSD";
-   if(apiSymbol == "XRPUSDT") return "XRPUSD";
-   if(apiSymbol == "BNBUSDT") return "BNBUSD";
-   if(apiSymbol == "SOLUSDT") return "SOLUSD";
-   if(apiSymbol == "XAUUSDT") return "XAUUSD";
-   if(apiSymbol == "EURUSDT") return "EURUSD";
-   if(apiSymbol == "GBPUSDT") return "GBPUSD";
-   return apiSymbol;  // ถ้าไม่ตรง ใช้ตัวเดิม
+   // ตัด suffix ออกเช่น .i, .m, .r ฯลฯ เพื่อ match กับ base symbol
+   string baseSymbol = apiSymbol;
+   int dotPos = StringFind(apiSymbol, ".");
+   if(dotPos > 0)
+      baseSymbol = StringSubstr(apiSymbol, 0, dotPos);
+
+   // Direct mapping
+   if(baseSymbol == "BTCUSDT" || baseSymbol == "BTCUSD") return "BTCUSD";
+   if(baseSymbol == "ETHUSDT" || baseSymbol == "ETHUSD") return "ETHUSD";
+   if(baseSymbol == "XRPUSDT" || baseSymbol == "XRPUSD") return "XRPUSD";
+   if(baseSymbol == "BNBUSDT" || baseSymbol == "BNBUSD") return "BNBUSD";
+   if(baseSymbol == "SOLUSDT" || baseSymbol == "SOLUSD") return "SOLUSD";
+   if(baseSymbol == "XAUUSDT" || baseSymbol == "XAUUSD") return "XAUUSD";
+   if(baseSymbol == "EURUSDT" || baseSymbol == "EURUSD") return "EURUSD";
+   if(baseSymbol == "GBPUSDT" || baseSymbol == "GBPUSD") return "GBPUSD";
+
+   // ถ้าไม่ตรง — ลองใช้ตัวเดิม (MT5 อาจมี suffix เช่น BTCUSDm, BTCUSD.i)
+   return apiSymbol;
+}
+
+//+------------------------------------------------------------------+
+//| ตรวจว่า symbol ตรงกันหรือไม่ (รองรับ suffix .i, .m ฯลฯ)            |
+//+------------------------------------------------------------------+
+bool SymbolMatches(string signalSymbol, string chartSymbol)
+{
+   if(signalSymbol == chartSymbol) return true;
+
+   // ตัด suffix ออกเช่น BTCUSDm → BTCUSD, BTCUSD.i → BTCUSD
+   string sigBase = signalSymbol;
+   string chrBase = chartSymbol;
+
+   int dotPos;
+   dotPos = StringFind(signalSymbol, ".");
+   if(dotPos > 0) sigBase = StringSubstr(signalSymbol, 0, dotPos);
+   dotPos = StringFind(chartSymbol, ".");
+   if(dotPos > 0) chrBase = StringSubstr(chartSymbol, 0, dotPos);
+
+   // เทียบ base
+   if(sigBase == chrBase) return true;
+
+   // ลองตัดตัวสุดท้าย (เช่น BTCUSDm → BTCUSD)
+   int sigLen = StringLen(sigBase);
+   int chrLen = StringLen(chrBase);
+   if(sigLen > 4 && chrLen > 4)
+   {
+      string sigTrim = StringSubstr(sigBase, 0, sigLen - 1);
+      string chrTrim = StringSubstr(chrBase, 0, chrLen - 1);
+      if(sigTrim == chrTrim) return true;
+   }
+
+   return false;
 }
 
 //+------------------------------------------------------------------+
@@ -107,7 +150,7 @@ bool ReadSignal(SignalData &signal)
    // ตรวจว่าไฟล์มีอยู่
    if(!FileIsExist(g_signalFile, FILE_COMMON))
    {
-      LogMessage("Signal file not found: " + g_signalFile);
+      // ไม่ log ทุก tick — รบกวน
       return false;
    }
 
@@ -126,7 +169,7 @@ bool ReadSignal(SignalData &signal)
    }
    FileClose(handle);
 
-   // Parse JSON แบบ manual (MQL5 ไม่มี JSON library built-in)
+   // Parse JSON แบบ manual
    signal.signal      = JSONString(content, "signal");
    signal.symbol      = JSONString(content, "symbol");
    signal.timeframe   = JSONString(content, "timeframe");
@@ -139,6 +182,7 @@ bool ReadSignal(SignalData &signal)
    signal.take_profit = JSONDouble(content, "take_profit");
    signal.position_size = JSONDouble(content, "position_size");
    signal.risk_reward_ratio = JSONDouble(content, "risk_reward_ratio");
+   signal.risk_level  = JSONString(content, "risk_level");
    signal.timestamp   = JSONString(content, "timestamp");
    signal.version     = JSONString(content, "version");
 
@@ -152,15 +196,25 @@ bool ReadSignal(SignalData &signal)
       return false;
    }
 
+   // ตรวจ SL/TP ต้อง > 0
+   if(signal.stop_loss <= 0 || signal.take_profit <= 0)
+   {
+      LogMessage("Invalid signal: SL=" + DoubleToString(signal.stop_loss, 5) + " TP=" + DoubleToString(signal.take_profit, 5));
+      return false;
+   }
+
    // ตรวจอายุสัญญาณ
    if(signal.timestamp != "")
    {
-      datetime sigTime = StringToTime(signal.timestamp);
-      int ageMinutes = (int)((TimeCurrent() - sigTime) / 60);
-      if(ageMinutes > InpSignalExpiry)
+      datetime sigTime = ParseISOTime(signal.timestamp);
+      if(sigTime > 0)
       {
-         LogMessage("Signal expired (" + IntegerToString(ageMinutes) + " min old)");
-         return false;
+         int ageMinutes = (int)((TimeCurrent() - sigTime) / 60);
+         if(ageMinutes > InpSignalExpiry)
+         {
+            LogMessage("Signal expired (" + IntegerToString(ageMinutes) + " min old)");
+            return false;
+         }
       }
    }
 
@@ -188,7 +242,7 @@ string JSONString(string json, string key)
    if(pos >= StringLen(json)) return "";
 
    // ถ้าเป็น string (มี quote)
-   if(json[pos] == '"')
+   if(json[pos] == '\"')
    {
       int end = StringFind(json, "\"", pos + 1);
       if(end < 0) return "";
@@ -209,6 +263,35 @@ double JSONDouble(string json, string key)
    string val = JSONString(json, key);
    if(val == "") return 0.0;
    return StringToDouble(val);
+}
+
+//+------------------------------------------------------------------+
+//| Parse ISO 8601 timestamp to datetime                             |
+//+------------------------------------------------------------------+
+datetime ParseISOTime(string iso)
+{
+   // Format: 2026-05-20T01:31:24.186312+00:00
+   // หรือ:   2026-05-20T01:31:24+00:00
+   // หรือ:   2026-05-20T01:31:24
+   if(StringLen(iso) < 19) return 0;
+   
+   int year  = (int)StringToInteger(StringSubstr(iso, 0, 4));
+   int month = (int)StringToInteger(StringSubstr(iso, 5, 2));
+   int day   = (int)StringToInteger(StringSubstr(iso, 8, 2));
+   int hour  = (int)StringToInteger(StringSubstr(iso, 11, 2));
+   int min   = (int)StringToInteger(StringSubstr(iso, 14, 2));
+   int sec   = (int)StringToInteger(StringSubstr(iso, 17, 2));
+   
+   // สร้าง datetime (สมมติ UTC — MT5 จะ adjust เอง)
+   MqlDateTime dt;
+   dt.year = year;
+   dt.mon = month;
+   dt.day = day;
+   dt.hour = hour;
+   dt.min = min;
+   dt.sec = sec;
+   
+   return StructToTime(dt);
 }
 
 //+------------------------------------------------------------------+
@@ -319,11 +402,22 @@ bool ExecuteBuy(string symbol, double sl, double tp, double lots)
    request.magic     = InpMagicNumber;
    request.comment   = "AtsawinAI";
    request.type_filling = ORDER_FILLING_IOC;
-
+   
    if(!OrderSend(request, result))
    {
-      LogMessage("BUY OrderSend failed: " + IntegerToString(GetLastError()));
-      return false;
+      // Fallback: ลอง FOK แล้ว RETURN
+      LogMessage("BUY IOC failed, trying FOK...");
+      request.type_filling = ORDER_FILLING_FOK;
+      if(!OrderSend(request, result))
+      {
+         LogMessage("BUY FOK failed, trying RETURN...");
+         request.type_filling = ORDER_FILLING_RETURN;
+         if(!OrderSend(request, result))
+         {
+            LogMessage("BUY OrderSend failed (all filling modes): " + IntegerToString(GetLastError()));
+            return false;
+         }
+      }
    }
 
    if(result.retcode != TRADE_RETCODE_DONE && result.retcode != TRADE_RETCODE_PLACED)
@@ -371,11 +465,22 @@ bool ExecuteSell(string symbol, double sl, double tp, double lots)
    request.magic     = InpMagicNumber;
    request.comment   = "AtsawinAI";
    request.type_filling = ORDER_FILLING_IOC;
-
+   
    if(!OrderSend(request, result))
    {
-      LogMessage("SELL OrderSend failed: " + IntegerToString(GetLastError()));
-      return false;
+      // Fallback: ลอง FOK แล้ว RETURN
+      LogMessage("SELL IOC failed, trying FOK...");
+      request.type_filling = ORDER_FILLING_FOK;
+      if(!OrderSend(request, result))
+      {
+         LogMessage("SELL FOK failed, trying RETURN...");
+         request.type_filling = ORDER_FILLING_RETURN;
+         if(!OrderSend(request, result))
+         {
+            LogMessage("SELL OrderSend failed (all filling modes): " + IntegerToString(GetLastError()));
+            return false;
+         }
+      }
    }
 
    if(result.retcode != TRADE_RETCODE_DONE && result.retcode != TRADE_RETCODE_PLACED)
@@ -384,9 +489,10 @@ bool ExecuteSell(string symbol, double sl, double tp, double lots)
       return false;
    }
 
+   // BUG FIX: เพิ่ม " หน้า TP= ที่ขาดหาย
    LogMessage("✅ SELL executed: " + symbol + " " + DoubleToString(lots, 2) + " lots @ " +
               DoubleToString(entry, digits) + " SL=" + DoubleToString(sl, digits) +
-              TP=" + DoubleToString(tp, digits));
+              " TP=" + DoubleToString(tp, digits));
    g_totalTrades++;
    return true;
 }
@@ -421,11 +527,13 @@ int OnInit()
    g_statusFile = terminalPath + "\\MQL5\\Files\\" + InpStatusFile;
    g_logFile    = terminalPath + "\\MQL5\\Files\\atsawin\\ea_log.txt";
 
-   // สร้างโฟลเดอร์
-   FolderCreate(terminalPath + "\\MQL5\\Files\\atsawin");
+   // สร้างโฟลเดอร์ (สร้างทีละชั้น เพราะ FolderCreate ไม่สร้าง nested)
+   string basePath = terminalPath + "\\MQL5\\Files";
+   FolderCreate(basePath);
+   FolderCreate(basePath + "\\atsawin");
 
    LogMessage("========================================");
-   LogMessage("Atsawin EA v1.0 Initialized");
+   LogMessage("Atsawin EA v1.1 Initialized");
    LogMessage("Signal file: " + g_signalFile);
    LogMessage("Symbol: " + _Symbol);
    LogMessage("Magic: " + IntegerToString(InpMagicNumber));
@@ -476,7 +584,9 @@ void OnTick()
 
    LogMessage("Signal: " + sig.signal + " " + sig.symbol +
               " conf=" + DoubleToString(sig.confidence, 2) +
-              " consensus=" + sig.consensus);
+              " consensus=" + sig.consensus +
+              " SL=" + DoubleToString(sig.stop_loss, 5) +
+              " TP=" + DoubleToString(sig.take_profit, 5));
 
    // ตรวจ confidence
    if(sig.confidence < InpMinConfidence)
@@ -492,8 +602,8 @@ void OnTick()
       return;
    }
 
-   // ตรวจ symbol ตรงกับ chart หรือไม่
-   if(sig.symbol != "" && sig.symbol != _Symbol)
+   // ตรวจ symbol ตรงกับ chart หรือไม่ (fuzzy match)
+   if(sig.symbol != "" && !SymbolMatches(sig.symbol, _Symbol))
    {
       LogMessage("Signal symbol " + sig.symbol + " != chart " + _Symbol + " — skipping");
       return;

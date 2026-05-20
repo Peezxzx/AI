@@ -1,0 +1,21 @@
+[Unit]
+Description=Atsawin EA Bridge - Python Signal Generator for MT5
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Atsawin-AI-Core/ea
+ExecStart=/usr/bin/python3 /root/Atsawin-AI-Core/ea/atsawin_bridge.py
+Restart=always
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=ATSAWIN_API_URL=http://185.84.161.189:8000
+Environment=ATSAWIN_API_KEY=atsawin-ea-bridge-key
+
+[Install]
+WantedBy=multi-user.target

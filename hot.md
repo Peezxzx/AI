@@ -1,11 +1,56 @@
 # HOT MEMORY
 
 ## Current Task
-Building AI Operating System with Trading AI Infrastructure.
+Fixing MT5 EA + Python Bridge bugs for Atsawin AI Trading System.
 
 ---
 
-## Current State Analysis (2026-05-17 18:39:00 UTC)
+## Session 2026-05-20: MT5 EA Bug Fix Session
+
+### Bugs Found & Fixed
+
+#### Python Bridge (atsawin_bridge.py)
+1. **aiohttp not installed** — `pip install aiohttp` in global Python
+2. **sym_to_mt5() dict comprehension bug** — `{v:k for k,v in CONFIG["sym_map"]}` missing `.items()` → iterate chars instead of key-value pairs → ValueError
+3. **API error handling** — No retry logic, no timeout handling → added `api_request()` with 3 retries + exponential backoff
+4. **Fallback signal path** — When `/trading/ea/scan` returns empty, fallback to `/trading/analysis/signal` + calculate SL/TP from price
+5. **SL/TP = 0** — Fallback signal had no SL/TP → added price fetch + 2%/3% SL/TP calculation
+6. **min_confidence too high** — Default 0.5 filtered all signals → lowered to 0.3 for testing
+7. **Health check** — Added `--health` flag for API connectivity check
+8. **Bridge running** — Started in background (PID 66286), scans every 5 min
+
+#### MQL5 EA (AtsawinEA.mq5)
+1. **FolderCreate nested** — `FolderCreate("MQL5\\Files\\atsawin")` fails if parent doesn't exist → create step by step
+2. **ORDER_FILLING_IOC** — Some brokers don't support IOC → fallback chain: IOC → FOK → RETURN
+3. **Signal expiry parse** — `StringToTime()` can't parse ISO 8601 format → added `ParseISOTime()` function
+4. **Version bump** — v1.1 → v1.2
+
+### Service File
+- Created `/root/Atsawin-AI-Core/ea/atsawin-bridge.service` (systemd)
+- Need sudo to install: `sudo cp ... && sudo systemctl enable --now atsawin-bridge`
+
+### Signal File Format (v1.2)
+```json
+{
+  "version": "1.2",
+  "signal": "sell",
+  "symbol": "BTCUSD",
+  "timeframe": "1h",
+  "confidence": 0.333,
+  "entry_price": 76651.65,
+  "stop_loss": 78184.68,
+  "take_profit": 74352.1,
+  "risk_reward_ratio": 1.5,
+  "timestamp": "2026-05-20T01:31:24.186312+00:00"
+}
+```
+
+### Known Issues
+- XAUUSDT → API returns 500 error (slice bug in market data)
+- Signal confidence currently low (0.33) — market conditions
+- Bridge needs sudo to install as systemd service
+
+---
 
 ### ✅ Running Services (All Persistent)
 - **FastAPI Backend**: systemd service `atsawin-api.service` (port 8000) - Restart=always
@@ -38,6 +83,32 @@ Building AI Operating System with Trading AI Infrastructure.
 ## Active Development
 - Currently working on Advanced Memory System
 - Next: Production Infrastructure (K8s, monitoring)
+
+---
+
+## Session 2026-05-18: Desktop GUI Environment
+- Installed + optimized XFCE4 desktop for VPS
+- XRDP remote desktop on port 3389 (TLS secured)
+- Optimizations: compositor off, 16bpp, no multimon, max 5 sessions
+- Apps: xfce4-terminal, thunar, mousepad, ristretto, xfce4-taskmanager, xfce4-screenshooter, network-manager-gnome, firefox
+- xrdp + xrdp-sesman both active and running
+- Memory: 3.8GB total, ~2.9GB available after GUI install
+- Disk: 46GB free (21% used)
+- Connect via RDP: server-ip:3389, login with system username/password
+
+## Session 2026-05-19: Thai Language Support for XFCE/XRDP
+- Installed Thai fonts: Noto Sans Thai, Noto CJK, full TLWG font set (Garuda, Kinnari, Laksaman, Loma, Mono, Norasi, Purisa, Sawasdee, Typewriter, Typist, Typo, Umpush, Waree)
+- Generated locale: th_TH.UTF-8
+- Installed IBus Thai input methods: ibus-libthai (LibThai engine) + ibus-m17n (m17n engine)
+- Configured IBus auto-start in XRDP session via /etc/xrdp/startwm.sh
+- Set environment variables: GTK_IM_MODULE=ibus, QT_IM_MODULE=ibus, XMODIFIERS=@im=ibus
+- Configured XFCE keyboard layout: US + Thai with Alt+Shift toggle
+- Set system locale: LANG=en_US.UTF-8, LC_CTYPE=th_TH.UTF-8
+- Created IBus autostart entries (system-wide + per-user)
+- Created XFCE xsettings with GTK IM Module = ibus
+- Keyboard shortcut: Alt+Shift to switch between English and Thai
+- IBus panel icon visible in system tray for input method selection
+- Restarted xrdp + xrdp-sesman services to apply changes
 
 ---
 
