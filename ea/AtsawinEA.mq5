@@ -1,54 +1,80 @@
 //+------------------------------------------------------------------+
-//|                                          AtsawinEA.mq5           |
-//|                    Atsawin AI Trading EA for MetaTrader 5         |
+//|                                          AtsawinEA.mq5 v2.0      |
+//|                    Atsawin AI Trading EA — Unified Edition        |
+//|                    รวม WebRequest + File-based + Risk Management  |
 //|                                                                    |
-//|  อ่านสัญญาณจาก JSON file (เขียนโดย Python Bridge)                  |
-//|  แล้ว execute order บน MT5 พร้อม SL/TP/Position Sizing             |
+//|  รองรับ 2 โหมด:                                                     |
+//|    1. WebRequest Mode — เรียก API จาก Linux VPS โดยตรง            |
+//|    2. File Mode — อ่าน signal จาก JSON file (Python bridge)        |
 //|                                                                    |
-//|  Flow:  Python Bridge → latest_signal.json → AtsawinEA → Execute  |
+//|  Flow:                                                              |
+//|    WebRequest:  MT5 EA → HTTP GET/POST → Linux VPS API             |
+//|    File Mode:   Python Bridge → latest_signal.json → MT5 EA        |
 //+------------------------------------------------------------------+
 #property copyright "Atsawin AI"
 #property link      ""
-#property version   "1.10"
+#property version   "2.00"
 #property strict
 
+#include <Trade\Trade.mqh>
+#include <Files\FileTxt.mqh>
+#include <Files\FileJson.mqh>
+
 //+------------------------------------------------------------------+
-//| CONFIG — แก้ค่าตรงนี้                                              |
+//| INPUT PARAMETERS                                                  |
 //+------------------------------------------------------------------+
-input string   InpSignalFile    = "atsawin\\latest_signal.json";  // ไฟล์สัญญาณ
-input string   InpStatusFile    = "atsawin\\ea_status.json";      // ไฟล์สถานะ
-input long     InpMagicNumber   = 20250518;                       // Magic Number
-input double   InpRiskPercent   = 2.0;                            // Risk % ต่อเทรด
-input double   InpMaxLot        = 1.0;                             // Lot สูงสุด
-input double   InpMinLot        = 0.01;                            // Lot ต่ำสุด
-input double   InpMaxSpreadPt   = 30;                              // Spread สูงสุด (points)
-input double   InpSlippagePt    = 10;                              // Slippage สูงสุด (points)
-input int      InpMaxOpenTrades = 3;                               // จำนวนเทรดสูงสุด
-input double   InpMinConfidence = 0.5;                             // ความมั่นใจขั้นต่ำ
-input int      InpSignalExpiry  = 60;                              // อายุสัญญาณ (นาที)
-input bool     InpEnableLogging = true;                            // เปิด log
+input group "═══ Connection Mode ═══"
+input bool     InpUseWebRequest  = true;                              // true=WebRequest, false=File Mode
+input string   InpLinuxVPS       = "http://185.84.160.106";          // Linux VPS URL
+input string   InpApiKey         = "mt5bridge2024";                   // API Key
+
+input group "═══ Signal File (File Mode) ═══"
+input string   InpSignalFile     = "atsawin\\latest_signal.json";    // Signal JSON file
+input string   InpStatusFile     = "atsawin\\ea_status.json";        // Status JSON file
+
+input group "═══ Risk Management ═══"
+input double   InpRiskPercent    = 2.0;                              // Risk % per trade
+input double   InpMaxLot         = 1.0;                               // Max lot size
+input double   InpMinLot         = 0.01;                              // Min lot size
+input double   InpMaxSpreadPt    = 30;                                // Max spread (points)
+input double   InpSlippagePt     = 10;                                // Max slippage (points)
+input int      InpMaxOpenTrades  = 3;                                 // Max concurrent trades
+input double   InpMinConfidence  = 0.3;                               // Min signal confidence (0-1)
+input int      InpSignalExpiry   = 60;                                // Signal expiry (minutes)
+
+input group "═══ Trading ═══"
+input long     InpMagicNumber    = 20250518;                          // Magic Number
+input int      InpPollSec        = 10;                                // Poll interval (seconds)
+input bool     InpEnableLogging  = true;                              // Enable file logging
+input bool     InpEnableAlerts   = true;                              // Enable alert popups
 
 //+------------------------------------------------------------------+
 //| GLOBAL VARIABLES                                                  |
 //+------------------------------------------------------------------+
-string   g_signalFile;          // เส้นทางไฟล์สัญญาณเต็ม
-string   g_statusFile;          // เส้นทางไฟล์สถานะเต็ม
-string   g_logFile;             // เส้นทางไฟล์ log
-datetime g_lastSignalTime;      // เวลาอ่านสัญญาณล่าสุด
-datetime g_lastBarTime;         // เวลา bar ล่าสุด
-int      g_totalTrades;         // จำนวนเทรดทั้งหมด
-double   g_totalPnL;            // PnL รวม
-bool     g_initialized;         // เริ่มต้นแล้ว?
+CTrade g_trade;
+string g_signalFile;
+string g_statusFile;
+string g_logFile;
+datetime g_lastSignalTime;
+datetime g_lastBarTime;
+datetime g_lastCandleTime;
+int      g_totalTrades;
+double   g_totalPnL;
+double   g_dailyPnL;
+datetime g_lastDay;
+bool     g_initialized;
+int      g_consecutiveErrors;
+int      g_maxConsecutiveErrors = 5;
 
-// โครงสร้างสัญญาณ
+// Signal structure
 struct SignalData
 {
    string   version;
    string   signal;             // "buy" / "sell" / "hold"
-   string   symbol;             // สัญญา
+   string   symbol;
    string   timeframe;
    double   confidence;         // 0-1
-   string   consensus;          // "strong_buy" / "weak_buy" / etc
+   string   consensus;
    double   buy_score;
    double   sell_score;
    double   entry_price;
@@ -57,24 +83,42 @@ struct SignalData
    double   position_size;
    double   risk_reward_ratio;
    string   risk_level;
-   string   timestamp;          // ISO timestamp
-   bool     valid;              // อ่านสำเร็จ?
+   string   timestamp;
+   bool     valid;
 };
 
-SignalData g_currentSignal;     // สัญญาณปัจจุบัน
+SignalData g_currentSignal;
+
+// Trade tracking
+struct TradeRecord
+{
+   ulong    ticket;
+   string   action;
+   double   lot;
+   double   entry_price;
+   double   sl;
+   double   tp;
+   double   close_price;
+   double   pnl;
+   string   status;             // "open" / "closed" / "failed"
+   datetime open_time;
+   datetime close_time;
+   string   source;             // "webrequest" / "file"
+};
+
+TradeRecord g_tradeHistory[];
+int g_tradeCount;
 
 //+------------------------------------------------------------------+
 //| Symbol Mapping: API name → MT5 name (fuzzy match)                |
 //+------------------------------------------------------------------+
 string SymbolToMT5(string apiSymbol)
 {
-   // ตัด suffix ออกเช่น .i, .m, .r ฯลฯ เพื่อ match กับ base symbol
    string baseSymbol = apiSymbol;
    int dotPos = StringFind(apiSymbol, ".");
    if(dotPos > 0)
       baseSymbol = StringSubstr(apiSymbol, 0, dotPos);
 
-   // Direct mapping
    if(baseSymbol == "BTCUSDT" || baseSymbol == "BTCUSD") return "BTCUSD";
    if(baseSymbol == "ETHUSDT" || baseSymbol == "ETHUSD") return "ETHUSD";
    if(baseSymbol == "XRPUSDT" || baseSymbol == "XRPUSD") return "XRPUSD";
@@ -84,18 +128,16 @@ string SymbolToMT5(string apiSymbol)
    if(baseSymbol == "EURUSDT" || baseSymbol == "EURUSD") return "EURUSD";
    if(baseSymbol == "GBPUSDT" || baseSymbol == "GBPUSD") return "GBPUSD";
 
-   // ถ้าไม่ตรง — ลองใช้ตัวเดิม (MT5 อาจมี suffix เช่น BTCUSDm, BTCUSD.i)
    return apiSymbol;
 }
 
 //+------------------------------------------------------------------+
-//| ตรวจว่า symbol ตรงกันหรือไม่ (รองรับ suffix .i, .m ฯลฯ)            |
+//| Check if symbols match (handles suffixes like .i, .m, etc.)      |
 //+------------------------------------------------------------------+
 bool SymbolMatches(string signalSymbol, string chartSymbol)
 {
    if(signalSymbol == chartSymbol) return true;
 
-   // ตัด suffix ออกเช่น BTCUSDm → BTCUSD, BTCUSD.i → BTCUSD
    string sigBase = signalSymbol;
    string chrBase = chartSymbol;
 
@@ -105,10 +147,8 @@ bool SymbolMatches(string signalSymbol, string chartSymbol)
    dotPos = StringFind(chartSymbol, ".");
    if(dotPos > 0) chrBase = StringSubstr(chartSymbol, 0, dotPos);
 
-   // เทียบ base
    if(sigBase == chrBase) return true;
 
-   // ลองตัดตัวสุดท้าย (เช่น BTCUSDm → BTCUSD)
    int sigLen = StringLen(sigBase);
    int chrLen = StringLen(chrBase);
    if(sigLen > 4 && chrLen > 4)
@@ -127,10 +167,9 @@ bool SymbolMatches(string signalSymbol, string chartSymbol)
 void LogMessage(string msg)
 {
    if(!InpEnableLogging) return;
-   string fullMsg = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + " [AtsawinEA] " + msg;
+   string fullMsg = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + " [AtsawinEA v2] " + msg;
    Print(fullMsg);
 
-   // เขียนลงไฟล์
    int handle = FileOpen(g_logFile, FILE_WRITE|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
    if(handle != INVALID_HANDLE)
    {
@@ -141,379 +180,419 @@ void LogMessage(string msg)
 }
 
 //+------------------------------------------------------------------+
-//| อ่านสัญญาณจาก JSON file                                           |
+//| Write status file for external monitoring                         |
 //+------------------------------------------------------------------+
-bool ReadSignal(SignalData &signal)
+void WriteStatus()
+{
+   int handle = FileOpen(g_statusFile, FILE_WRITE|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
+   if(handle == INVALID_HANDLE) return;
+
+   FileWriteString(handle, "{");
+   FileWriteString(handle, "\"ea_version\":\"2.00\",");
+   FileWriteString(handle, "\"symbol\":\"" + _Symbol + "\",");
+   FileWriteString(handle, "\"mode\":\"" + (InpUseWebRequest ? "webrequest" : "file") + "\",");
+   FileWriteString(handle, "\"total_trades\":" + IntegerToString(g_totalTrades) + ",");
+   FileWriteString(handle, "\"total_pnl\":" + DoubleToString(g_totalPnL, 2) + ",");
+   FileWriteString(handle, "\"daily_pnl\":" + DoubleToString(g_dailyPnL, 2) + ",");
+   FileWriteString(handle, "\"open_positions\":" + IntegerToString(PositionsTotal()) + ",");
+   FileWriteString(handle, "\"last_signal\":\"" + g_currentSignal.signal + "\",");
+   FileWriteString(handle, "\"last_confidence\":" + DoubleToString(g_currentSignal.confidence, 3) + ",");
+   FileWriteString(handle, "\"consecutive_errors\":" + IntegerToString(g_consecutiveErrors) + ",");
+   FileWriteString(handle, "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",");
+   FileWriteString(handle, "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",");
+   FileWriteString(handle, "\"last_update\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\"");
+   FileWriteString(handle, "}");
+
+   FileClose(handle);
+}
+
+//+------------------------------------------------------------------+
+//| Simple JSON value extractor                                       |
+//+------------------------------------------------------------------+
+string JS(string json, string key)
+{
+   string s = "\"" + key + "\":";
+   int p = StringFind(json, s);
+   if(p < 0) return "";
+   p += StringLen(s);
+   while(p < StringLen(json) && StringGetCharacter(json, p) == ' ') p++;
+   bool q = (StringGetCharacter(json, p) == '\"');
+   if(q) p++;
+   int e = p;
+   if(q) while(e < StringLen(json) && StringGetCharacter(json, e) != '\"') e++;
+   else  while(e < StringLen(json) && StringGetCharacter(json, e) != ',' && StringGetCharacter(json, e) != '}') e++;
+   return StringSubstr(json, p, e - p);
+}
+
+//+------------------------------------------------------------------+
+//| WebRequest GET                                                    |
+//+------------------------------------------------------------------+
+string DoGet(string path)
+{
+   string url     = InpLinuxVPS + path;
+   string headers = "X-API-Key: " + InpApiKey + "\r\n";
+   char   data[], result[];
+   string rh;
+   ResetLastError();
+   int code = WebRequest("GET", url, headers, 5000, data, result, rh);
+   if(code == 200) return CharArrayToString(result);
+   if(code < 0) LogMessage("WebRequest GET error=" + IntegerToString(GetLastError()) + " path=" + path);
+   return "";
+}
+
+//+------------------------------------------------------------------+
+//| WebRequest POST                                                   |
+//+------------------------------------------------------------------+
+string DoPost(string path, string body)
+{
+   string url     = InpLinuxVPS + path;
+   string headers = "Content-Type: application/json\r\nX-API-Key: " + InpApiKey + "\r\n";
+   char   data[], result[];
+   string rh;
+   StringToCharArray(body, data, 0, StringLen(body));
+   ArrayResize(data, StringLen(body));
+   ResetLastError();
+   int code = WebRequest("POST", url, headers, 5000, data, result, rh);
+   if(code == 200) return CharArrayToString(result);
+   if(code < 0) LogMessage("WebRequest POST error=" + IntegerToString(GetLastError()) + " path=" + path);
+   return "";
+}
+
+//+------------------------------------------------------------------+
+//| Send price data to Linux VPS                                      |
+//+------------------------------------------------------------------+
+void SendPrice()
+{
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick)) return;
+   string body = StringFormat(
+      "{\"symbol\":\"%s\",\"bid\":%.5f,\"ask\":%.5f,\"time\":%d,"
+      "\"account\":{\"balance\":%.2f,\"equity\":%.2f,\"margin\":%.2f,"
+      "\"freeMargin\":%.2f,\"profit\":%.2f}}",
+      _Symbol, tick.bid, tick.ask, (int)tick.time,
+      AccountInfoDouble(ACCOUNT_BALANCE),
+      AccountInfoDouble(ACCOUNT_EQUITY),
+      AccountInfoDouble(ACCOUNT_MARGIN),
+      AccountInfoDouble(ACCOUNT_MARGIN_FREE),
+      AccountInfoDouble(ACCOUNT_PROFIT));
+   DoPost("/api/mt5/price", body);
+}
+
+//+------------------------------------------------------------------+
+//| Send candle data to Linux VPS                                     |
+//+------------------------------------------------------------------+
+void SendCandles(string tfName, ENUM_TIMEFRAMES tf, int count)
+{
+   MqlRates rates[];
+   int n = CopyRates(_Symbol, tf, 0, count, rates);
+   if(n <= 0) return;
+   string s = "[";
+   for(int i = 0; i < n; i++)
+   {
+      if(i > 0) s += ",";
+      s += StringFormat(
+         "{\"time\":%d,\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%d}",
+         (int)rates[i].time, rates[i].open, rates[i].high,
+         rates[i].low, rates[i].close, (int)rates[i].tick_volume);
+   }
+   s += "]";
+   string body = StringFormat(
+      "{\"symbol\":\"%s\",\"timeframe\":\"%s\",\"candles\":%s}",
+      _Symbol, tfName, s);
+   DoPost("/api/mt5/candles", body);
+   LogMessage("Candles " + tfName + ": " + IntegerToString(n) + " bars sent");
+}
+
+//+------------------------------------------------------------------+
+//| Read signal from JSON file (File Mode)                            |
+//+------------------------------------------------------------------+
+bool ReadSignalFromFile(SignalData &signal)
 {
    signal.valid = false;
 
-   // ตรวจว่าไฟล์มีอยู่
    if(!FileIsExist(g_signalFile, FILE_COMMON))
-   {
-      // ไม่ log ทุก tick — รบกวน
       return false;
-   }
 
-   // อ่านไฟล์
    int handle = FileOpen(g_signalFile, FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
    if(handle == INVALID_HANDLE)
-   {
-      LogMessage("Cannot open signal file");
       return false;
-   }
 
-   string content = "";
+   string json = "";
    while(!FileIsEnding(handle))
-   {
-      content += FileReadString(handle) + "\n";
-   }
+      json += FileReadString(handle) + "\n";
    FileClose(handle);
 
-   // Parse JSON แบบ manual
-   signal.signal      = JSONString(content, "signal");
-   signal.symbol      = JSONString(content, "symbol");
-   signal.timeframe   = JSONString(content, "timeframe");
-   signal.confidence  = JSONDouble(content, "confidence");
-   signal.consensus   = JSONString(content, "consensus");
-   signal.buy_score   = JSONDouble(content, "buy_score");
-   signal.sell_score  = JSONDouble(content, "sell_score");
-   signal.entry_price = JSONDouble(content, "entry_price");
-   signal.stop_loss   = JSONDouble(content, "stop_loss");
-   signal.take_profit = JSONDouble(content, "take_profit");
-   signal.position_size = JSONDouble(content, "position_size");
-   signal.risk_reward_ratio = JSONDouble(content, "risk_reward_ratio");
-   signal.risk_level  = JSONString(content, "risk_level");
-   signal.timestamp   = JSONString(content, "timestamp");
-   signal.version     = JSONString(content, "version");
+   if(StringLen(json) < 10)
+      return false;
 
-   // Map symbol
-   signal.symbol = SymbolToMT5(signal.symbol);
+   signal.version          = JS(json, "version");
+   signal.signal           = JS(json, "signal");
+   signal.symbol           = JS(json, "symbol");
+   signal.timeframe        = JS(json, "timeframe");
+   signal.confidence       = StringToDouble(JS(json, "confidence"));
+   signal.consensus        = JS(json, "consensus");
+   signal.buy_score        = StringToDouble(JS(json, "buy_score"));
+   signal.sell_score       = StringToDouble(JS(json, "sell_score"));
+   signal.entry_price      = StringToDouble(JS(json, "entry_price"));
+   signal.stop_loss        = StringToDouble(JS(json, "stop_loss"));
+   signal.take_profit      = StringToDouble(JS(json, "take_profit"));
+   signal.position_size    = StringToDouble(JS(json, "position_size"));
+   signal.risk_reward_ratio = StringToDouble(JS(json, "risk_reward_ratio"));
+   signal.risk_level       = JS(json, "risk_level");
+   signal.timestamp        = JS(json, "timestamp");
+   signal.valid            = (signal.signal == "buy" || signal.signal == "sell");
 
-   // ตรวจความถูกต้อง
-   if(signal.signal == "" || signal.symbol == "")
+   return signal.valid;
+}
+
+//+------------------------------------------------------------------+
+//| Read signal from WebRequest (WebRequest Mode)                     |
+//+------------------------------------------------------------------+
+bool ReadSignalFromAPI(SignalData &signal)
+{
+   signal.valid = false;
+
+   string resp = DoGet("/api/mt5/signal?symbol=" + _Symbol);
+   if(StringLen(resp) < 5) return false;
+   if(StringFind(resp, "\"signal\":null") >= 0) return false;
+
+   signal.signal    = JS(resp, "action");
+   signal.confidence = StringToDouble(JS(resp, "confidence"));
+   signal.stop_loss  = StringToDouble(JS(resp, "sl"));
+   signal.take_profit = StringToDouble(JS(resp, "tp"));
+   signal.entry_price = StringToDouble(JS(resp, "entry_price"));
+   signal.risk_reward_ratio = StringToDouble(JS(resp, "risk_reward_ratio"));
+   signal.consensus  = JS(resp, "consensus");
+   signal.risk_level = JS(resp, "risk_level");
+   signal.timestamp  = JS(resp, "timestamp");
+
+   if(signal.signal == "BUY") signal.signal = "buy";
+   if(signal.signal == "SELL") signal.signal = "sell";
+
+   signal.valid = (signal.signal == "buy" || signal.signal == "sell");
+   return signal.valid;
+}
+
+//+------------------------------------------------------------------+
+//| Validate signal before execution                                  |
+//+------------------------------------------------------------------+
+bool ValidateSignal(SignalData &signal)
+{
+   // Check confidence
+   if(signal.confidence < InpMinConfidence)
    {
-      LogMessage("Invalid signal: empty signal or symbol");
+      LogMessage("Signal rejected: confidence too low (" + DoubleToString(signal.confidence, 3) + " < " + DoubleToString(InpMinConfidence, 3) + ")");
       return false;
    }
 
-   // ตรวจ SL/TP ต้อง > 0
-   if(signal.stop_loss <= 0 || signal.take_profit <= 0)
+   // Check spread
+   MqlTick tick;
+   if(SymbolInfoTick(_Symbol, tick))
    {
-      LogMessage("Invalid signal: SL=" + DoubleToString(signal.stop_loss, 5) + " TP=" + DoubleToString(signal.take_profit, 5));
+      double spread = (tick.ask - tick.bid) / _Point;
+      if(spread > InpMaxSpreadPt)
+      {
+         LogMessage("Signal rejected: spread too high (" + DoubleToString(spread, 1) + " > " + DoubleToString(InpMaxSpreadPt, 1) + " pts)");
+         return false;
+      }
+   }
+
+   // Check max open positions
+   int openCount = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      if(PositionGetTicket(i) > 0)
+      {
+         if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
+            openCount++;
+      }
+   }
+   if(openCount >= InpMaxOpenTrades)
+   {
+      LogMessage("Signal rejected: max positions reached (" + IntegerToString(openCount) + "/" + IntegerToString(InpMaxOpenTrades) + ")");
       return false;
    }
 
-   // ตรวจอายุสัญญาณ
-   if(signal.timestamp != "")
+   // Check signal expiry
+   if(StringLen(signal.timestamp) > 0)
    {
-      datetime sigTime = ParseISOTime(signal.timestamp);
+      datetime sigTime = StringToTime(signal.timestamp);
       if(sigTime > 0)
       {
-         int ageMinutes = (int)((TimeCurrent() - sigTime) / 60);
-         if(ageMinutes > InpSignalExpiry)
+         int ageMin = (int)((TimeCurrent() - sigTime) / 60);
+         if(ageMin > InpSignalExpiry)
          {
-            LogMessage("Signal expired (" + IntegerToString(ageMinutes) + " min old)");
+            LogMessage("Signal rejected: expired (" + IntegerToString(ageMin) + " min > " + IntegerToString(InpSignalExpiry) + " min)");
             return false;
          }
       }
    }
 
-   signal.valid = true;
+   // Check symbol match
+   if(StringLen(signal.symbol) > 0)
+   {
+      if(!SymbolMatches(signal.symbol, _Symbol))
+      {
+         LogMessage("Signal rejected: symbol mismatch (signal=" + signal.symbol + ", chart=" + _Symbol + ")");
+         return false;
+      }
+   }
+
    return true;
 }
 
 //+------------------------------------------------------------------+
-//| JSON Parser helpers (simple, no external lib)                     |
+//| Calculate position size based on risk                             |
 //+------------------------------------------------------------------+
-string JSONString(string json, string key)
+double CalculateLotSize(SignalData &signal)
 {
-   string searchKey = "\"" + key + "\"";
-   int pos = StringFind(json, searchKey);
-   if(pos < 0) return "";
-
-   pos = StringFind(json, ":", pos + StringLen(searchKey));
-   if(pos < 0) return "";
-
-   // ข้าม whitespace
-   pos++;
-   while(pos < StringLen(json) && (json[pos] == ' ' || json[pos] == '\t'))
-      pos++;
-
-   if(pos >= StringLen(json)) return "";
-
-   // ถ้าเป็น string (มี quote)
-   if(json[pos] == '\"')
+   double lot = signal.position_size;
+   if(lot <= 0)
    {
-      int end = StringFind(json, "\"", pos + 1);
-      if(end < 0) return "";
-      return StringSubstr(json, pos + 1, end - pos - 1);
+      // Calculate from risk percentage
+      double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+      double riskAmount = balance * InpRiskPercent / 100.0;
+
+      MqlTick tick;
+      if(!SymbolInfoTick(_Symbol, tick)) return InpMinLot;
+
+      double slDistance = 0;
+      if(signal.signal == "buy" && signal.stop_loss > 0)
+         slDistance = tick.ask - signal.stop_loss;
+      else if(signal.signal == "sell" && signal.stop_loss > 0)
+         slDistance = signal.stop_loss - tick.bid;
+
+      if(slDistance <= 0) return InpMinLot;
+
+      double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+      double tickSize  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
+      if(tickValue <= 0 || tickSize <= 0) return InpMinLot;
+
+      double slTicks = slDistance / tickSize;
+      if(slTicks <= 0) return InpMinLot;
+
+      lot = riskAmount / (slTicks * tickValue);
    }
-
-   // ถ้าเป็น number หรือ boolean
-   int end = pos;
-   while(end < StringLen(json) && json[end] != ',' && json[end] != '}' && json[end] != '\n')
-      end++;
-   string val = StringSubstr(json, pos, end - pos);
-   StringTrimRight(val);
-   return val;
-}
-
-double JSONDouble(string json, string key)
-{
-   string val = JSONString(json, key);
-   if(val == "") return 0.0;
-   return StringToDouble(val);
-}
-
-//+------------------------------------------------------------------+
-//| Parse ISO 8601 timestamp to datetime                             |
-//+------------------------------------------------------------------+
-datetime ParseISOTime(string iso)
-{
-   // Format: 2026-05-20T01:31:24.186312+00:00
-   // หรือ:   2026-05-20T01:31:24+00:00
-   // หรือ:   2026-05-20T01:31:24
-   if(StringLen(iso) < 19) return 0;
-   
-   int year  = (int)StringToInteger(StringSubstr(iso, 0, 4));
-   int month = (int)StringToInteger(StringSubstr(iso, 5, 2));
-   int day   = (int)StringToInteger(StringSubstr(iso, 8, 2));
-   int hour  = (int)StringToInteger(StringSubstr(iso, 11, 2));
-   int min   = (int)StringToInteger(StringSubstr(iso, 14, 2));
-   int sec   = (int)StringToInteger(StringSubstr(iso, 17, 2));
-   
-   // สร้าง datetime (สมมติ UTC — MT5 จะ adjust เอง)
-   MqlDateTime dt;
-   dt.year = year;
-   dt.mon = month;
-   dt.day = day;
-   dt.hour = hour;
-   dt.min = min;
-   dt.sec = sec;
-   
-   return StructToTime(dt);
-}
-
-//+------------------------------------------------------------------+
-//| ตรวจสอบว่ามี position เปิดอยู่แล้วหรือไม่                            |
-//+------------------------------------------------------------------+
-bool HasOpenPosition(string symbol)
-{
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket == 0) continue;
-      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
-      if(PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
-      return true;
-   }
-   return false;
-}
-
-//+------------------------------------------------------------------+
-//| นับจำนวน position ที่เปิดอยู่                                      |
-//+------------------------------------------------------------------+
-int CountOpenPositions()
-{
-   int count = 0;
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket == 0) continue;
-      if(PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
-      count++;
-   }
-   return count;
-}
-
-//+------------------------------------------------------------------+
-//| คำนวณ Position Size จาก Risk %                                    |
-//+------------------------------------------------------------------+
-double CalculateLotSize(string symbol, double stopLossPrice)
-{
-   double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
-   double riskAmount = accountBalance * InpRiskPercent / 100.0;
-
-   double symbolPoint = SymbolInfoDouble(symbol, SYMBOL_POINT);
-   int    symbolDigits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
-
-   if(stopLossPrice <= 0 || ask <= 0) return InpMinLot;
-
-   double slDistance = MathAbs(ask - stopLossPrice);
-   double tickValue  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-   double tickSize   = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
-
-   if(tickValue <= 0 || tickSize <= 0) return InpMinLot;
-
-   double lotStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-   double minLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   double maxLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-
-   // คำนวณ lot
-   double lots = riskAmount / (slDistance / tickSize * tickValue);
-
-   // Round ให้ตรง lot step
-   lots = MathFloor(lots / lotStep) * lotStep;
 
    // Clamp
-   lots = MathMax(lots, MathMax(minLot, InpMinLot));
-   lots = MathMin(lots, MathMin(maxLot, InpMaxLot));
+   if(lot < InpMinLot) lot = InpMinLot;
+   if(lot > InpMaxLot) lot = InpMaxLot;
 
-   // ถ้า signal มี position_size ให้ใช้ถ้าเล็กกว่า
-   if(g_currentSignal.position_size > 0)
-   {
-      lots = MathMin(lots, g_currentSignal.position_size);
-   }
+   // Normalize to lot step
+   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+   double minLot  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxLot  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   if(lotStep > 0) lot = MathFloor(lot / lotStep) * lotStep;
+   if(lot < minLot) lot = minLot;
+   if(lot > maxLot) lot = maxLot;
 
-   return NormalizeDouble(lots, 2);
+   return NormalizeDouble(lot, 2);
 }
 
 //+------------------------------------------------------------------+
-//| Execute Buy Order                                                 |
+//| Execute trade                                                      |
 //+------------------------------------------------------------------+
-bool ExecuteBuy(string symbol, double sl, double tp, double lots)
+void ExecuteTrade(SignalData &signal, string source)
 {
-   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
-   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   if(!ValidateSignal(signal)) return;
 
-   // ถ้า signal มี entry_price ที่ต่างจาก ask มาก → ใช้ ask
-   double entry = ask;
-   if(g_currentSignal.entry_price > 0)
+   double lot = CalculateLotSize(signal);
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick)) return;
+
+   double sl = signal.stop_loss;
+   double tp = signal.take_profit;
+
+   LogMessage("Executing " + signal.signal + " lot=" + DoubleToString(lot, 2) +
+              " SL=" + DoubleToString(sl, 5) + " TP=" + DoubleToString(tp, 5) +
+              " conf=" + DoubleToString(signal.confidence, 3) +
+              " source=" + source);
+
+   bool ok = false;
+   if(signal.signal == "buy")
+      ok = g_trade.Buy(lot, _Symbol, tick.ask, sl, tp, "AtsawinEA_v2");
+   else if(signal.signal == "sell")
+      ok = g_trade.Sell(lot, _Symbol, tick.bid, sl, tp, "AtsawinEA_v2");
+
+   if(ok)
    {
-      double diff = MathAbs(g_currentSignal.entry_price - ask) / SymbolInfoDouble(symbol, SYMBOL_POINT);
-      if(diff < 100) entry = g_currentSignal.entry_price;  // ถ้าต่างกันไม่เกิน 100 points
+      g_totalTrades++;
+      g_consecutiveErrors = 0;
+      LogMessage("EXECUTED: " + signal.signal + " @ " + DoubleToString(g_trade.ResultPrice(), 5) +
+                 " #" + IntegerToString((int)g_trade.ResultOrder()) +
+                 " lot=" + DoubleToString(lot, 2));
+
+      // Report execution to API
+      DoPost("/api/mt5/executed", StringFormat(
+         "{\"ticket\":%d,\"action\":\"%s\",\"price\":%.5f,\"lot\":%.2f,"
+         "\"sl\":%.5f,\"tp\":%.5f,\"confidence\":%.3f,\"source\":\"%s\",\"time\":%d}",
+         (int)g_trade.ResultOrder(), signal.signal, g_trade.ResultPrice(), lot,
+         sl, tp, signal.confidence, source, (int)TimeCurrent()));
+
+      // Record trade
+      int n = ArraySize(g_tradeHistory);
+      ArrayResize(g_tradeHistory, n + 1);
+      g_tradeHistory[n].ticket     = g_trade.ResultOrder();
+      g_tradeHistory[n].action     = signal.signal;
+      g_tradeHistory[n].lot        = lot;
+      g_tradeHistory[n].entry_price = g_trade.ResultPrice();
+      g_tradeHistory[n].sl         = sl;
+      g_tradeHistory[n].tp         = tp;
+      g_tradeHistory[n].status     = "open";
+      g_tradeHistory[n].open_time  = TimeCurrent();
+      g_tradeHistory[n].source     = source;
+      g_tradeCount = n + 1;
+
+      if(InpEnableAlerts)
+         Alert("AtsawinEA: " + signal.signal + " " + _Symbol + " @ " + DoubleToString(g_trade.ResultPrice(), 5));
    }
-
-   sl = NormalizeDouble(sl, digits);
-   tp = NormalizeDouble(tp, digits);
-
-   MqlTradeRequest request = {};
-   MqlTradeResult  result  = {};
-
-   request.action    = TRADE_ACTION_DEAL;
-   request.symbol    = symbol;
-   request.volume    = lots;
-   request.type      = ORDER_TYPE_BUY;
-   request.price     = entry;
-   request.sl        = sl;
-   request.tp        = tp;
-   request.deviation = InpSlippagePt;
-   request.magic     = InpMagicNumber;
-   request.comment   = "AtsawinAI";
-   request.type_filling = ORDER_FILLING_IOC;
-   
-   if(!OrderSend(request, result))
+   else
    {
-      // Fallback: ลอง FOK แล้ว RETURN
-      LogMessage("BUY IOC failed, trying FOK...");
-      request.type_filling = ORDER_FILLING_FOK;
-      if(!OrderSend(request, result))
+      g_consecutiveErrors++;
+      LogMessage("FAILED: retcode=" + IntegerToString(g_trade.ResultRetcode()) +
+                 " error=" + IntegerToString(GetLastError()));
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Check and close positions commanded by API                        |
+//+------------------------------------------------------------------+
+void CheckClose()
+{
+   string resp = DoGet("/api/mt5/close?symbol=" + _Symbol);
+   string ts = JS(resp, "closeTicket");
+   if(StringLen(ts) == 0 || ts == "null") return;
+
+   ulong closeTicket = (ulong)StringToInteger(ts);
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == closeTicket)
       {
-         LogMessage("BUY FOK failed, trying RETURN...");
-         request.type_filling = ORDER_FILLING_RETURN;
-         if(!OrderSend(request, result))
+         if(g_trade.PositionClose(ticket))
          {
-            LogMessage("BUY OrderSend failed (all filling modes): " + IntegerToString(GetLastError()));
-            return false;
+            LogMessage("Position closed: #" + IntegerToString((int)ticket));
+
+            // Update trade record
+            for(int j = 0; j < ArraySize(g_tradeHistory); j++)
+            {
+               if(g_tradeHistory[j].ticket == ticket)
+               {
+                  g_tradeHistory[j].status = "closed";
+                  g_tradeHistory[j].close_time = TimeCurrent();
+                  g_tradeHistory[j].close_price = PositionGetDouble(POSITION_PRICE_CURRENT);
+                  g_tradeHistory[j].pnl = PositionGetDouble(POSITION_PROFIT);
+                  g_dailyPnL += g_tradeHistory[j].pnl;
+                  break;
+               }
+            }
          }
+         else
+            LogMessage("Close failed: #" + IntegerToString((int)ticket) + " retcode=" + IntegerToString(g_trade.ResultRetcode()));
+         break;
       }
    }
-
-   if(result.retcode != TRADE_RETCODE_DONE && result.retcode != TRADE_RETCODE_PLACED)
-   {
-      LogMessage("BUY failed, retcode: " + IntegerToString(result.retcode));
-      return false;
-   }
-
-   LogMessage("✅ BUY executed: " + symbol + " " + DoubleToString(lots, 2) + " lots @ " +
-              DoubleToString(entry, digits) + " SL=" + DoubleToString(sl, digits) +
-              " TP=" + DoubleToString(tp, digits));
-   g_totalTrades++;
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| Execute Sell Order                                                |
-//+------------------------------------------------------------------+
-bool ExecuteSell(string symbol, double sl, double tp, double lots)
-{
-   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
-   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
-
-   double entry = bid;
-   if(g_currentSignal.entry_price > 0)
-   {
-      double diff = MathAbs(g_currentSignal.entry_price - bid) / SymbolInfoDouble(symbol, SYMBOL_POINT);
-      if(diff < 100) entry = g_currentSignal.entry_price;
-   }
-
-   sl = NormalizeDouble(sl, digits);
-   tp = NormalizeDouble(tp, digits);
-
-   MqlTradeRequest request = {};
-   MqlTradeResult  result  = {};
-
-   request.action    = TRADE_ACTION_DEAL;
-   request.symbol    = symbol;
-   request.volume    = lots;
-   request.type      = ORDER_TYPE_SELL;
-   request.price     = entry;
-   request.sl        = sl;
-   request.tp        = tp;
-   request.deviation = InpSlippagePt;
-   request.magic     = InpMagicNumber;
-   request.comment   = "AtsawinAI";
-   request.type_filling = ORDER_FILLING_IOC;
-   
-   if(!OrderSend(request, result))
-   {
-      // Fallback: ลอง FOK แล้ว RETURN
-      LogMessage("SELL IOC failed, trying FOK...");
-      request.type_filling = ORDER_FILLING_FOK;
-      if(!OrderSend(request, result))
-      {
-         LogMessage("SELL FOK failed, trying RETURN...");
-         request.type_filling = ORDER_FILLING_RETURN;
-         if(!OrderSend(request, result))
-         {
-            LogMessage("SELL OrderSend failed (all filling modes): " + IntegerToString(GetLastError()));
-            return false;
-         }
-      }
-   }
-
-   if(result.retcode != TRADE_RETCODE_DONE && result.retcode != TRADE_RETCODE_PLACED)
-   {
-      LogMessage("SELL failed, retcode: " + IntegerToString(result.retcode));
-      return false;
-   }
-
-   // BUG FIX: เพิ่ม " หน้า TP= ที่ขาดหาย
-   LogMessage("✅ SELL executed: " + symbol + " " + DoubleToString(lots, 2) + " lots @ " +
-              DoubleToString(entry, digits) + " SL=" + DoubleToString(sl, digits) +
-              " TP=" + DoubleToString(tp, digits));
-   g_totalTrades++;
-   return true;
-}
-
-//+------------------------------------------------------------------+
-//| ตรวจ Spread                                                       |
-//+------------------------------------------------------------------+
-bool IsSpreadOK(string symbol)
-{
-   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
-   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
-   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
-   if(point <= 0) return true;
-
-   int spreadPoints = (int)((ask - bid) / point);
-   if(spreadPoints > InpMaxSpreadPt)
-   {
-      LogMessage("Spread too high: " + IntegerToString(spreadPoints) + " > " + IntegerToString(InpMaxSpreadPt));
-      return false;
-   }
-   return true;
 }
 
 //+------------------------------------------------------------------+
@@ -521,155 +600,132 @@ bool IsSpreadOK(string symbol)
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   // สร้างเส้นทางไฟล์
-   string terminalPath = TerminalInfoString(TERMINAL_DATA_PATH);
-   g_signalFile = terminalPath + "\\MQL5\\Files\\" + InpSignalFile;
-   g_statusFile = terminalPath + "\\MQL5\\Files\\" + InpStatusFile;
-   g_logFile    = terminalPath + "\\MQL5\\Files\\atsawin\\ea_log.txt";
+   // Setup trade object
+   g_trade.SetExpertMagicNumber(InpMagicNumber);
+   g_trade.SetDeviationInPoints((ulong)InpSlippagePt);
+   g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
 
-   // สร้างโฟลเดอร์ (สร้างทีละชั้น เพราะ FolderCreate ไม่สร้าง nested)
-   string basePath = terminalPath + "\\MQL5\\Files";
-   FolderCreate(basePath);
-   FolderCreate(basePath + "\\atsawin");
+   // Build file paths
+   g_signalFile = InpSignalFile;
+   g_statusFile = InpStatusFile;
+   g_logFile    = "atsawin\\ea_log.txt";
 
-   LogMessage("========================================");
-   LogMessage("Atsawin EA v1.1 Initialized");
-   LogMessage("Signal file: " + g_signalFile);
-   LogMessage("Symbol: " + _Symbol);
-   LogMessage("Magic: " + IntegerToString(InpMagicNumber));
-   LogMessage("Risk: " + DoubleToString(InpRiskPercent, 1) + "%");
-   LogMessage("========================================");
-
-   g_initialized = true;
+   // Initialize counters
    g_totalTrades = 0;
-   g_totalPnL = 0;
-   g_lastBarTime = 0;
+   g_totalPnL    = 0;
+   g_dailyPnL    = 0;
+   g_lastDay     = 0;
+   g_initialized = true;
+   g_consecutiveErrors = 0;
+   g_lastCandleTime = 0;
+   g_lastBarTime    = 0;
+   ArrayResize(g_tradeHistory, 0);
+   g_tradeCount = 0;
 
-   return(INIT_SUCCEEDED);
+   // Reset signal
+   g_currentSignal.valid = false;
+
+   LogMessage("═══════════════════════════════════════════");
+   LogMessage("AtsawinEA v2.0 started");
+   LogMessage("Symbol: " + _Symbol + " | Mode: " + (InpUseWebRequest ? "WebRequest" : "File"));
+   LogMessage("VPS: " + InpLinuxVPS);
+   LogMessage("Risk: " + DoubleToString(InpRiskPercent, 1) + "% | MaxTrades: " + IntegerToString(InpMaxOpenTrades));
+   LogMessage("═══════════════════════════════════════════");
+
+   // Send initial data
+   if(InpUseWebRequest)
+   {
+      SendPrice();
+      SendCandles("M15", PERIOD_M15, 200);
+      SendCandles("H1",  PERIOD_H1,  200);
+      SendCandles("H4",  PERIOD_H4,  200);
+      SendCandles("D1",  PERIOD_D1,  200);
+   }
+
+   EventSetTimer(InpPollSec);
+   WriteStatus();
+
+   return INIT_SUCCEEDED;
 }
 
 //+------------------------------------------------------------------+
 //| Expert deinitialization function                                  |
 //+------------------------------------------------------------------+
-void OnDeinit(const int reason)
+void OnDeinit(const int r)
 {
-   LogMessage("Atsawin EA stopped. Total trades: " + IntegerToString(g_totalTrades));
+   EventKillTimer();
+   LogMessage("AtsawinEA v2.0 stopped. Total trades: " + IntegerToString(g_totalTrades) + " PnL: " + DoubleToString(g_totalPnL, 2));
+   WriteStatus();
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                              |
+//| Timer function                                                     |
 //+------------------------------------------------------------------+
-void OnTick()
+void OnTimer()
 {
    if(!g_initialized) return;
 
-   // ตรวจว่าเปิด bar ใหม่หรือยัง (ทำงานครั้งเดียวต่อ bar)
-   datetime currentBarTime = iTime(_Symbol, _Period, 0);
-   if(currentBarTime == g_lastBarTime) return;  // ยังเป็น bar เดิม
-   g_lastBarTime = currentBarTime;
-
-   // อ่านสัญญาณ
-   SignalData sig;
-   if(!ReadSignal(sig))
+   // Reset daily PnL at midnight
+   MqlDateTime dt;
+   TimeCurrent(dt);
+   if(dt.day != g_lastDay)
    {
-      return;  // ไม่มีสัญญาณ
+      g_dailyPnL = 0;
+      g_lastDay = dt.day;
    }
 
-   if(!sig.valid)
+   if(InpUseWebRequest)
    {
-      return;
-   }
+      // WebRequest Mode: send price, check signal, check close
+      SendPrice();
 
-   g_currentSignal = sig;
+      SignalData signal;
+      if(ReadSignalFromAPI(signal))
+      {
+         g_currentSignal = signal;
+         ExecuteTrade(signal, "webrequest");
+      }
 
-   LogMessage("Signal: " + sig.signal + " " + sig.symbol +
-              " conf=" + DoubleToString(sig.confidence, 2) +
-              " consensus=" + sig.consensus +
-              " SL=" + DoubleToString(sig.stop_loss, 5) +
-              " TP=" + DoubleToString(sig.take_profit, 5));
+      CheckClose();
 
-   // ตรวจ confidence
-   if(sig.confidence < InpMinConfidence)
-   {
-      LogMessage("Confidence too low: " + DoubleToString(sig.confidence, 2));
-      return;
-   }
-
-   // ตรวจว่าเป็น hold
-   if(sig.signal == "hold")
-   {
-      LogMessage("Signal is HOLD — no action");
-      return;
-   }
-
-   // ตรวจ symbol ตรงกับ chart หรือไม่ (fuzzy match)
-   if(sig.symbol != "" && !SymbolMatches(sig.symbol, _Symbol))
-   {
-      LogMessage("Signal symbol " + sig.symbol + " != chart " + _Symbol + " — skipping");
-      return;
-   }
-
-   // ตรวจจำนวน position
-   if(CountOpenPositions() >= InpMaxOpenTrades)
-   {
-      LogMessage("Max open positions reached: " + IntegerToString(InpMaxOpenTrades));
-      return;
-   }
-
-   // ตรวจว่ามี position เปิดอยู่แล้วหรือไม่
-   if(HasOpenPosition(_Symbol))
-   {
-      LogMessage("Position already open for " + _Symbol);
-      return;
-   }
-
-   // ตรวจ spread
-   if(!IsSpreadOK(_Symbol))
-   {
-      return;
-   }
-
-   // คำนวณ lot size
-   double lots = CalculateLotSize(_Symbol, sig.stop_loss);
-   if(lots <= 0)
-   {
-      LogMessage("Invalid lot size: " + DoubleToString(lots, 2));
-      return;
-   }
-
-   // Execute
-   bool success = false;
-   if(sig.signal == "buy")
-   {
-      success = ExecuteBuy(_Symbol, sig.stop_loss, sig.take_profit, lots);
-   }
-   else if(sig.signal == "sell")
-   {
-      success = ExecuteSell(_Symbol, sig.stop_loss, sig.take_profit, lots);
+      // Refresh candle data every 15 minutes
+      if(TimeCurrent() - g_lastCandleTime >= 900)
+      {
+         SendCandles("M15", PERIOD_M15, 200);
+         SendCandles("H1",  PERIOD_H1,  200);
+         SendCandles("H4",  PERIOD_H4,  200);
+         SendCandles("D1",  PERIOD_D1,  200);
+         g_lastCandleTime = TimeCurrent();
+      }
    }
    else
    {
-      LogMessage("Unknown signal: " + sig.signal);
-   }
-
-   // เขียนสถานะ
-   if(success)
-   {
-      string status = "{\"status\":\"executed\",\"signal\":\"" + sig.signal +
-                       "\",\"symbol\":\"" + _Symbol +
-                       "\",\"lots\":" + DoubleToString(lots, 2) +
-                       ",\"time\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\"}";
-      int h = FileOpen(g_statusFile, FILE_WRITE|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
-      if(h != INVALID_HANDLE)
+      // File Mode: read signal from JSON file
+      SignalData signal;
+      if(ReadSignalFromFile(signal))
       {
-         FileWriteString(h, status);
-         FileClose(h);
+         // Check if this is a new signal
+         if(signal.timestamp != g_currentSignal.timestamp)
+         {
+            g_currentSignal = signal;
+            ExecuteTrade(signal, "file");
+         }
       }
    }
+
+   // Stop if too many consecutive errors
+   if(g_consecutiveErrors >= g_maxConsecutiveErrors)
+   {
+      LogMessage("WARNING: Too many consecutive errors (" + IntegerToString(g_consecutiveErrors) + "). Pausing...");
+      g_consecutiveErrors = 0;  // Reset and continue after pause
+      Sleep(30000);  // Pause 30 seconds
+   }
+
+   WriteStatus();
 }
 
 //+------------------------------------------------------------------+
-//| Trade transaction function — ติดตาม PnL                            |
+//| Trade transaction handler — track PnL                             |
 //+------------------------------------------------------------------+
 void OnTradeTransaction(const MqlTradeTransaction &trans,
                         const MqlTradeRequest &request,
@@ -677,23 +733,24 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 {
    if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
    {
-      if(trans.deal != 0)
+      if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
       {
-         ulong dealTicket = trans.deal;
-         if(HistoryDealSelect(dealTicket))
-         {
-            ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
-            double profit = HistoryDealGetDouble(dealTicket, DEAL_PROFIT);
+         // Update PnL tracking
+         g_totalPnL += trans.profit;
+         g_dailyPnL += trans.profit;
 
-            if(entry == DEAL_ENTRY_OUT || entry == DEAL_ENTRY_OUT_BY)
-            {
-               g_totalPnL += profit;
-               string type = (entry == DEAL_ENTRY_OUT) ? "CLOSED" : "CLOSED_BY";
-               LogMessage(type + " PnL: " + DoubleToString(profit, 2) +
-                          " Total: " + DoubleToString(g_totalPnL, 2));
-            }
-         }
+         LogMessage("Deal: " + EnumToString(trans.deal_type) +
+                    " profit=" + DoubleToString(trans.profit, 2) +
+                    " total=" + DoubleToString(g_totalPnL, 2));
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Book event handler — track position changes                       |
+//+------------------------------------------------------------------+
+void OnBookEvent(const string &symbol)
+{
+   // Can be used for order book analysis in future
 }
 //+------------------------------------------------------------------+
