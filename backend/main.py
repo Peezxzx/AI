@@ -15,6 +15,7 @@ from event_system.endpoints import router as event_router
 from event_system.event_system_manager import event_system_manager
 from pipeline.router import router as pipeline_router
 from trading.router import router as trading_router
+from trading.mt5_api import router as mt5_router
 import psutil
 import os
 
@@ -34,6 +35,9 @@ app.include_router(pipeline_router, prefix="/pipeline")
 
 # Include trading routes
 app.include_router(trading_router, prefix="/trading")
+
+# Include MT5 bridge routes
+app.include_router(mt5_router)
 
 
 def get_system_stats():
