@@ -1,0 +1,722 @@
+[
+  {
+    "idx": 1,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 35.8,
+    "rc": 0
+  },
+  {
+    "idx": 2,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 28.6,
+    "rc": 0
+  },
+  {
+    "idx": 3,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 28.1,
+    "rc": 0
+  },
+  {
+    "idx": 4,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 28.6,
+    "rc": 0
+  },
+  {
+    "idx": 5,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 29.0,
+    "rc": 0
+  },
+  {
+    "idx": 6,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 31.3,
+    "rc": 0
+  },
+  {
+    "idx": 7,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 27.7,
+    "rc": 0
+  },
+  {
+    "idx": 8,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 27.3,
+    "rc": 0
+  },
+  {
+    "idx": 9,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 26.3,
+    "rc": 0
+  },
+  {
+    "idx": 10,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 27.8,
+    "rc": 0
+  },
+  {
+    "idx": 11,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 31.7,
+    "rc": 0
+  },
+  {
+    "idx": 12,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 28.4,
+    "rc": 0
+  },
+  {
+    "idx": 32,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 28.9,
+    "rc": 0
+  },
+  {
+    "idx": 33,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 26.9,
+    "rc": 0
+  },
+  {
+    "idx": 34,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 27.6,
+    "rc": 0
+  },
+  {
+    "idx": 35,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 27.1,
+    "rc": 0
+  },
+  {
+    "idx": 36,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 10000.0,
+    "trading_pnl": 0.0,
+    "trades": 32747,
+    "closes": 0,
+    "est_rebate": 1637.35,
+    "net_after_rebate": 1637.35,
+    "elapsed": 31.3,
+    "rc": 0
+  },
+  {
+    "idx": 22,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9885.34,
+    "trading_pnl": -114.65999999999985,
+    "trades": 1000,
+    "closes": 178,
+    "est_rebate": 50.0,
+    "net_after_rebate": -64.66,
+    "elapsed": 30.9,
+    "rc": 0
+  },
+  {
+    "idx": 21,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9883.51,
+    "trading_pnl": -116.48999999999978,
+    "trades": 1000,
+    "closes": 183,
+    "est_rebate": 50.0,
+    "net_after_rebate": -66.49,
+    "elapsed": 28.3,
+    "rc": 0
+  },
+  {
+    "idx": 28,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9853.17,
+    "trading_pnl": -146.82999999999993,
+    "trades": 1400,
+    "closes": 235,
+    "est_rebate": 70.0,
+    "net_after_rebate": -76.83,
+    "elapsed": 1.5,
+    "rc": 0
+  },
+  {
+    "idx": 29,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9853.17,
+    "trading_pnl": -146.82999999999993,
+    "trades": 1400,
+    "closes": 235,
+    "est_rebate": 70.0,
+    "net_after_rebate": -76.83,
+    "elapsed": 3.1,
+    "rc": 0
+  },
+  {
+    "idx": 30,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9853.17,
+    "trading_pnl": -146.82999999999993,
+    "trades": 1400,
+    "closes": 235,
+    "est_rebate": 70.0,
+    "net_after_rebate": -76.83,
+    "elapsed": 2.6,
+    "rc": 0
+  },
+  {
+    "idx": 31,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9853.17,
+    "trading_pnl": -146.82999999999993,
+    "trades": 1400,
+    "closes": 235,
+    "est_rebate": 70.0,
+    "net_after_rebate": -76.83,
+    "elapsed": 2.1,
+    "rc": 0
+  },
+  {
+    "idx": 23,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9872.14,
+    "trading_pnl": -127.86000000000058,
+    "trades": 1000,
+    "closes": 355,
+    "est_rebate": 50.0,
+    "net_after_rebate": -77.86,
+    "elapsed": 26.9,
+    "rc": 0
+  },
+  {
+    "idx": 18,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9861.3,
+    "trading_pnl": -138.70000000000073,
+    "trades": 1000,
+    "closes": 154,
+    "est_rebate": 50.0,
+    "net_after_rebate": -88.7,
+    "elapsed": 33.7,
+    "rc": 0
+  },
+  {
+    "idx": 17,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9859.87,
+    "trading_pnl": -140.1299999999992,
+    "trades": 1000,
+    "closes": 155,
+    "est_rebate": 50.0,
+    "net_after_rebate": -90.13,
+    "elapsed": 26.7,
+    "rc": 0
+  },
+  {
+    "idx": 19,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9853.83,
+    "trading_pnl": -146.17000000000007,
+    "trades": 1000,
+    "closes": 314,
+    "est_rebate": 50.0,
+    "net_after_rebate": -96.17,
+    "elapsed": 27.8,
+    "rc": 0
+  },
+  {
+    "idx": 24,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 150,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9853.51,
+    "trading_pnl": -146.48999999999978,
+    "trades": 1000,
+    "closes": 322,
+    "est_rebate": 50.0,
+    "net_after_rebate": -96.49,
+    "elapsed": 33.8,
+    "rc": 0
+  },
+  {
+    "idx": 25,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9853.51,
+    "trading_pnl": -146.48999999999978,
+    "trades": 1000,
+    "closes": 322,
+    "est_rebate": 50.0,
+    "net_after_rebate": -96.49,
+    "elapsed": 2.5,
+    "rc": 0
+  },
+  {
+    "idx": 26,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9853.51,
+    "trading_pnl": -146.48999999999978,
+    "trades": 1000,
+    "closes": 322,
+    "est_rebate": 50.0,
+    "net_after_rebate": -96.49,
+    "elapsed": 4.6,
+    "rc": 0
+  },
+  {
+    "idx": 27,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 60,
+      "InpHardStopLossPoints": 120,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9853.51,
+    "trading_pnl": -146.48999999999978,
+    "trades": 1000,
+    "closes": 322,
+    "est_rebate": 50.0,
+    "net_after_rebate": -96.49,
+    "elapsed": 1.5,
+    "rc": 0
+  },
+  {
+    "idx": 14,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9847.11,
+    "trading_pnl": -152.88999999999942,
+    "trades": 1000,
+    "closes": 134,
+    "est_rebate": 50.0,
+    "net_after_rebate": -102.89,
+    "elapsed": 29.0,
+    "rc": 0
+  },
+  {
+    "idx": 13,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 30,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9846.21,
+    "trading_pnl": -153.79000000000087,
+    "trades": 1000,
+    "closes": 136,
+    "est_rebate": 50.0,
+    "net_after_rebate": -103.79,
+    "elapsed": 29.0,
+    "rc": 0
+  },
+  {
+    "idx": 15,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": false,
+      "InpAlternateBuySell": true
+    },
+    "final_balance": 9842.14,
+    "trading_pnl": -157.86000000000058,
+    "trades": 1000,
+    "closes": 296,
+    "est_rebate": 50.0,
+    "net_after_rebate": -107.86,
+    "elapsed": 28.9,
+    "rc": 0
+  },
+  {
+    "idx": 20,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 80,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9837.19,
+    "trading_pnl": -162.8099999999995,
+    "trades": 1000,
+    "closes": 292,
+    "est_rebate": 50.0,
+    "net_after_rebate": -112.81,
+    "elapsed": 28.7,
+    "rc": 0
+  },
+  {
+    "idx": 16,
+    "params": {
+      "InpMaxSpreadPoints": 280,
+      "InpCloseAfterSeconds": 20,
+      "InpHardStopLossPoints": 300,
+      "InpTakeProfitPoints": 40,
+      "InpMinSecondsBetweenTrades": 120,
+      "InpUseSimpleTrendBias": true,
+      "InpAlternateBuySell": false
+    },
+    "final_balance": 9826.89,
+    "trading_pnl": -173.11000000000058,
+    "trades": 1000,
+    "closes": 274,
+    "est_rebate": 50.0,
+    "net_after_rebate": -123.11,
+    "elapsed": 33.9,
+    "rc": 0
+  }
+]

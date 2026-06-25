@@ -82,9 +82,27 @@ Ubuntu VPS
 
 ## Current Goal
 
-Build scalable AI operating system with autonomous coding pipeline, memory system, trading AI, and multi-agent architecture.
+Build scalable AI operating system with autonomous coding pipeline, memory system, trading AI, multi-agent architecture, and a Telegram-friendly virtual office command center UI.
 
-**Status**: Phase 4 Complete - All core infrastructure operational
+**Status**: Phase 4 Complete - All core infrastructure operational; Virtual Office prototype active in `frontend/virtual-office.html`. Local OS Core started: `backend/office_store.py` persists MT5/EA journal, commands, approval queue, and daily brief data in SQLite.
+
+**Operational note 2026-06-04**: FastAPI local server responds on `127.0.0.1:8000` and `/api/office/status` is usable for read-only dashboard/dev. PostgreSQL `5433` and Redis `6380` are not open on this Windows host, Docker is unavailable, and a status snapshot reported CPU at 100%; treat the server layer as local/dev-ready, not production-ready, until process supervision/resource monitoring/DB-cache plan are cleaned up.
+
+### Frontend / Virtual Office State (2026-06-03)
+- `frontend/virtual-office.html` is a self-contained Benz Command Center prototype.
+- Layout follows the supplied Benz Office / Trading Cafe reference: left sidebar, top integration bar, central pixel/isometric Agent Live Map, right Team Chat.
+- Pages implemented: Office Overview, Chat Center, Characters, Approval Board, Journal/SOP, Daily Brief, Settings.
+- Telegram Mini App responsive mode uses bottom tabs and safe-area viewport handling.
+- Frontend now displays Local OS Core widgets:
+  - Office Overview shows journal counters, Daily Brief Agent, and Approval Queue.
+  - Approval Board uses backend approve/reject endpoints.
+  - Journal/SOP shows SQLite journal counters.
+  - Daily Brief shows recommendation and skip reason table.
+- Backend Local OS Core active:
+  - `GET /api/office/status` returns live MT5/EA/system status plus `journal`, `daily_brief`, and `approvals`.
+  - `POST /api/office/command` stores command audit records, queues risky actions for owner approval, and returns read-only task-engine replies for status/brief/approval-list commands.
+  - `GET /api/office/brief` returns a trading coach style daily brief.
+  - `GET/POST /api/office/approvals` endpoints support approval/reject status updates without executing risky actions.
 
 ---
 
@@ -140,6 +158,27 @@ Build scalable AI operating system with autonomous coding pipeline, memory syste
 - File-based bridge: Python writes → MT5 reads on new bar
 - Config: symbols, risk%, SL/TP, position sizing, spread filter
 - 6 strategies composite: SMA crossover, RSI, MACD, Bollinger, Stochastic+RSI, ATR trend
+
+### Phase 5.6 — Continuous Bug Fix & Optimization (2026-06-01 → 2026-06-02)
+- Builder Agent cron job running autonomous bug fixes
+- Fixed: calculate_stochastic() tuple iteration bug in analysis.py
+- Fixed: CONFIG defaults stale after autotune — synced ema_fast 12→30, atr_sl_mult 1.8→2.0
+- Fixed: sig_threshold double-penalty bug — now accounts for both chop_penalty and session_out_penalty
+- Fixed: autotune/walkforward grid stale — added ema_fast=30 and atr_sl_mult=2.0 to search grids to match proven-best params
+- Signal quality: winrate 34.5%, pnl_r=-5.0 (best autotune result), skipped=1220/1470 bars
+- Remaining: high skipped rate due to session filter + chop regime, walk-forward inconsistent
+- Bridge/EA safety contract v2.1 (2026-06-02): bridge writes ASCII-safe JSON with signal_id/setup_key, timestamp_epoch/expires_at_epoch, symbol/mt5_symbol; EA v3.24 polls every 30s, blocks stale/duplicate executed signal_id, writes ea_runtime_status.json, and compiles 0 errors/0 warnings.
+- Bridge concurrency lock (2026-06-02): PID-based file lock at atsawin/bridge_mt5_pro.lock prevents duplicate bridge instances from running simultaneously, eliminating conflicting signal writes and wasted MT5 API slots.
+|- Session optimization safety guard (2026-06-03): added session_opt_min_hours=5 and session_opt_min_pnl_r=-2.0 floors to prevent optimize_session_hours_from_trade_log() from shrinking the session window below 5 hours or accepting negative-PnL configurations; live bridge main loop also resets to default if session hours fall below floor.
+|- Error recovery + Desktop sync (2026-06-03): restored max_consecutive_errors=10 loop in main() to prevent bridge crash on transient MT5 API errors; synced repo copy to Desktop (was 128 lines behind, missing lock + session safety + atomic write retry); killed duplicate bridge instances.
+- Bridge symbol_info() None guard (2026-06-03): scan_once() now guards against mt5.symbol_info() returning None before accessing .point — prevents AttributeError crash that would eventually shut down bridge after 10 consecutive errors during MT5 reconnection/symbol refresh.
+- Repo root bridge sync (2026-06-03): synced repo root bridge_mt5_pro.py with ea/ copy — was 119 lines behind, missing lock mechanism, session safety floors, error recovery loop, and symbol_info guard; all three copies (repo root, ea/, Desktop) now identical at 1323 lines.
+- FVG/Fib/RSI bridge strategy v2.4 (2026-06-03): user-authored PDF strategy concepts are now integrated in Python bridge first (EA execution unchanged). Signal schema/source `2.4` / `bridge_mt5_pro_v2.4_fvg_fib_rsi`; metadata includes FVG zone, PDF Fibonacci ratios, RSI divergence, and score_breakdown. Latest verification: 19 tests passed, backtest `trades=1128 wins=564 losses=564 winrate=50.0% pnl_r=242.87 skipped=72`; contract documented in `contracts/mt5_signal_v2_4.md`.
+- Desktop bridge sync + ea_status metadata recovery (2026-06-03): `_diag_signal.py` showed `ea_status.json` was missing `fib_nearest_ratio/level/distance` and `rsi_divergence` — repo/ea copies had them but Desktop deployed copy was stale. Added 4 missing fields to Desktop `bridge_mt5_pro.py`. All 3 copies (repo, ea/, Desktop) now in sync. 58 tests passed.
+- EMA bias test import fix (2026-06-04): `tests/test_ema_bias_fix.py` had `generate_signal` only imported inside `if __name__=="__main__":` block, causing `NameError` when pytest collected the module. Added `generate_signal` to module-level import. 4 tests now pass, full suite 75/75.
+- Desktop bridge status dict resync (2026-06-04): Desktop `bridge_mt5_pro.py` was 1620 lines vs repo 1631 lines — missing 11 status dict fields (contract, confirm_timeframe, entry_price, stop_loss, take_profit, atr, rsi, ema_fast, ema_slow, timestamp, timestamp_epoch). Desktop file was last modified at 03:22 while repo was updated at 05:38. Synced all three copies (repo root, ea/, Desktop) — all now 1631 lines, byte-identical. 58 ea tests + 17 root tests passed.
+- calc_position_size silent fallback fix (2026-06-04): `calc_position_size()` had 3 silent fallback paths returning 0.01 min lot — most impactful when `tick_value`/`tick_size` is 0 (common for Exness XAUUSDm). Added fallback `tick_value=point*100, tick_size=point` so position size is computed from actual risk parameters instead of silently returning 0.01. All fallback paths now emit `log.warning`. Synced all 3 copies (repo root, ea/, Desktop) — all now 1907 lines, byte-identical. 65 ea tests + 17 root tests passed. Validation: with balance=10000 and tick=0, OLD=0.01 → NEW=0.09 (proper risk-based sizing).
+- Session optimization statistical significance guard (2026-06-05): `optimize_session_hours_from_trade_log()` was accepting trade logs with as few as 12 total trades (3/hour × 4 hours), causing wildly inconsistent session hour selections (e.g., [0,1,5,10,13,14] → [0,1,2,3,4,5] → back). Raised `min_trades_per_hour` default from 3→10, added `min_total_trades=50` guard, added CONFIG entries `session_opt_min_trades_per_hour` and `session_opt_min_total_trades`. Updated `--optimize-session` handler to read from CONFIG. Updated existing tests to use sufficient data. Synced all 3 copies (repo root, ea/, Desktop). 69 ea tests + 14 root tests + 4 new validation tests passed.
 
 ---
 
@@ -217,8 +256,15 @@ Build scalable AI operating system with autonomous coding pipeline, memory syste
 2. Identify missing components
 3. Implement modular improvements
 4. Validate functionality
-5. Update memory state (spec.md, hot.md)
+5. Update memory state (spec.md, hot.md, architecture.md, system_state.md)
 6. Suggest next steps
+
+## Autonomous Brain Workflow (MCP-style)
+- Memory-first execution: load/update spec.md, architecture.md, system_state.md, hoting_old_knowledge.md before major tasks.
+- Maintain agent registry and role map for helper agents.
+- Maintain task queue with dependencies and execution order.
+- Perform periodic workspace scans and dependency drift checks.
+- Capture durable lessons in hoting_old_knowledge.md and keep spec/architecture synchronized.
 
 ---
 

@@ -27,6 +27,14 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════
 # CONFIG — แก้ค่าตรงนี้ได้เลย
 # ══════════════════════════════════════════════════════════════
+DEFAULT_BRIDGE_DIR = Path(
+    os.environ.get(
+        "ATSAWIN_BRIDGE_DIR",
+        str(Path(os.environ.get("APPDATA", str(Path.home() / "AppData/Roaming")))
+            / "MetaQuotes/Terminal/Common/Files/atsawin")
+    )
+)
+
 CONFIG = {
     # --- API ---
     "api_url": os.environ.get("ATSAWIN_API_URL", "http://185.84.161.189:8000"),
@@ -43,9 +51,9 @@ CONFIG = {
     "min_risk_reward": 1.5,      # Risk:Reward ขั้นต่ำ
 
     # --- ไฟล์ Bridge ---
-    "signal_file": "/root/Atsawin-AI-Core/ea/latest_signal.json",
-    "status_file": "/root/Atsawin-AI-Core/ea/ea_status.json",
-    "log_file":   "/root/Atsawin-AI-Core/ea/bridge.log",
+    "signal_file": str(DEFAULT_BRIDGE_DIR / "latest_signal.json"),
+    "status_file": str(DEFAULT_BRIDGE_DIR / "ea_status.json"),
+    "log_file":   str(DEFAULT_BRIDGE_DIR / "bridge.log"),
 
     # --- Mapping ---
     "sym_map": {                 # MT5 symbol → Binance API symbol
@@ -85,7 +93,7 @@ def atomic_write(path, data):
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, default=str))
+    tmp.write_text(json.dumps(data, indent=2, default=str, ensure_ascii=True))
     tmp.replace(p)
 
 async def api_request(session, method, path, json_data=None, retries=3):
@@ -248,10 +256,14 @@ async def scan_once(session, symbols=None, tf=None):
     # เขียน signal file
     if best_signal:
         signal_symbol = best_signal.get("symbol", "")
+        now = datetime.now(timezone.utc)
         out = {
-            "version": "1.2",
+            "schema_version": "2.1",
+            "contract": "atsawin_mt5_signal",
+            "version": "1.3",
             "signal": best_signal.get("signal", "hold"),
             "symbol": sym_to_mt5(signal_symbol),  # Binance → MT5 symbol
+            "mt5_symbol": sym_to_mt5(signal_symbol),
             "timeframe": best_signal.get("timeframe", timeframe),
             "confidence": best_signal.get("confidence", 0),
             "consensus": best_signal.get("consensus", ""),
@@ -264,15 +276,42 @@ async def scan_once(session, symbols=None, tf=None):
             "risk_reward_ratio": best_signal.get("risk_reward_ratio", 0),
             "risk_level": best_signal.get("risk_level", ""),
             "warnings": best_signal.get("warnings", []),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": now.isoformat(),
+            "timestamp_epoch": int(now.timestamp()),
+            "expires_at_epoch": int(now.timestamp()) + int(CONFIG["scan_interval"] * 2 + 30),
+            "source": "atsawin_bridge_v1.3",
         }
+        out["setup_key"] = "|".join([
+            str(out.get("mt5_symbol", "")), str(out.get("timeframe", "")), str(out.get("signal", "hold")),
+            f"{float(out.get('entry_price') or 0):.2f}", f"{float(out.get('stop_loss') or 0):.2f}",
+            f"{float(out.get('take_profit') or 0):.2f}", f"{float(out.get('confidence') or 0):.3f}",
+        ])
+        out["signal_id"] = out["setup_key"]
         atomic_write(CONFIG["signal_file"], out)
+
         log.info(f"✅ Signal written: {out['signal'].upper()} {out['symbol']} @ {out['entry_price']} SL={out['stop_loss']} TP={out['take_profit']}")
     else:
-        atomic_write(CONFIG["signal_file"], {
-            "signal": "hold", "confidence": 0, "reason": "No valid signals",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        now = datetime.now(timezone.utc)
+        hold = {
+            "schema_version": "2.1",
+            "contract": "atsawin_mt5_signal",
+            "version": "1.3",
+            "signal": "hold",
+            "confidence": 0,
+            "reason": "No valid signals",
+            "symbol": "",
+            "mt5_symbol": "",
+            "stop_loss": 0,
+            "take_profit": 0,
+            "risk_reward_ratio": 0,
+            "timestamp": now.isoformat(),
+            "timestamp_epoch": int(now.timestamp()),
+            "expires_at_epoch": int(now.timestamp()) + int(CONFIG["scan_interval"] * 2 + 30),
+            "source": "atsawin_bridge_v1.3",
+        }
+        hold["setup_key"] = "hold|no_valid_signals"
+        hold["signal_id"] = hold["setup_key"]
+        atomic_write(CONFIG["signal_file"], hold)
         log.info("No valid signals → HOLD")
 
     # เขียน status

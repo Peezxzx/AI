@@ -1,0 +1,17 @@
+{
+  "blockers": [
+    "missing docker",
+    "missing uvicorn in active Python environment",
+    "import not declared in requirements.txt: pydantic",
+    "import not declared in requirements.txt: trading"
+  ],
+  "compile_ok": true,
+  "docker_missing": true,
+  "imports_not_declared": [
+    "pydantic",
+    "trading"
+  ],
+  "missing_files": [],
+  "uvicorn": "ModuleNotFoundError: No module named 'uvicorn'",
+  "uvicorn_missing": true
+}

@@ -154,7 +154,7 @@ def calculate_stochastic(
         return []
 
     k_values = []
-    for i in period - 1, len(candles):
+    for i in range(period - 1, len(candles)):
         window = candles[i - period + 1:i + 1]
         high = max(c.high for c in window)
         low = min(c.low for c in window)
@@ -271,6 +271,8 @@ async def get_signal(
     timeframe: str = "1h",
 ) -> TradingSignal:
     """Generate a trading signal based on multiple indicators."""
+    from .market_data import get_klines as _get_klines  # avoid circular import at module level
+
     indicators = await get_indicators(
         symbol, timeframe,
         indicators=["sma", "ema", "rsi", "macd"],
@@ -278,41 +280,71 @@ async def get_signal(
     )
 
     signal = TradingSignal(symbol=symbol, timeframe=timeframe)
-    buy_score = 0
-    sell_score = 0
-    total_weight = 0
+    buy_score = 0.0
+    sell_score = 0.0
+    total_weight = 0.0
 
-    # RSI analysis
+    # RSI analysis — scaled by how far from neutral (50)
     if indicators.rsi:
         last_rsi = indicators.rsi[-1].value
+        rsi_signal = "oversold" if last_rsi < 30 else "overbought" if last_rsi > 70 else "neutral"
         signal.indicators_summary["rsi"] = {
             "value": round(last_rsi, 2),
-            "signal": "oversold" if last_rsi < 30 else "overbought" if last_rsi > 70 else "neutral",
+            "signal": rsi_signal,
         }
-        total_weight += 1
+        total_weight += 1.0
         if last_rsi < 30:
-            buy_score += 1
+            buy_score += min(1.0, (30 - last_rsi) / 30 + 0.5)
         elif last_rsi > 70:
-            sell_score += 1
+            sell_score += min(1.0, (last_rsi - 70) / 30 + 0.5)
 
-    # MACD analysis
+    # MACD analysis — use histogram magnitude for scoring
     if indicators.macd:
         last_macd = indicators.macd[-1]
         prev_macd = indicators.macd[-2] if len(indicators.macd) > 1 else last_macd
         macd_cross = "bullish" if last_macd.histogram > 0 and prev_macd.histogram <= 0 else \
-                      "bearish" if last_macd.histogram < 0 and prev_macd.histogram >= 0 else "neutral"
+                      "bearish" if last_macd.histogram < 0 and prev_macd.histogram >= 0 else \
+                      "above_zero" if last_macd.histogram > 0 else \
+                      "below_zero" if last_macd.histogram < 0 else "neutral"
         signal.indicators_summary["macd"] = {
             "value": round(last_macd.macd, 6),
             "signal": macd_cross,
         }
-        total_weight += 1
-        if macd_cross == "bullish":
-            buy_score += 1
-        elif macd_cross == "bearish":
-            sell_score += 1
+        total_weight += 1.0
+        if macd_cross in ("bullish", "above_zero"):
+            buy_score += 1.0 if macd_cross == "bullish" else 0.5
+        elif macd_cross in ("bearish", "below_zero"):
+            sell_score += 1.0 if macd_cross == "bearish" else 0.5
 
-    # SMA crossover (short vs long)
-    if indicators.sma and len(indicators.sma) >= 2:
+    # EMA crossover (fast vs slow) — computed from raw closes, NOT SMA-on-SMA
+    closes_available = False
+    closes = []
+    try:
+        candles = await _get_klines(symbol, timeframe, limit=100)
+        if candles and len(candles) >= 26:
+            closes = [c.close for c in candles]
+            closes_available = True
+    except Exception:
+        pass
+
+    if closes_available:
+        ema_fast = calculate_ema(closes, 12)
+        ema_slow = calculate_ema(closes, 26)
+        if ema_fast and ema_slow:
+            offset = len(ema_fast) - len(ema_slow)
+            fast_aligned = ema_fast[offset:]
+            cross = "golden_cross" if fast_aligned[-1] > ema_slow[-1] else "death_cross"
+            signal.indicators_summary["sma_cross"] = {
+                "value": f"{fast_aligned[-1]:.2f}/{ema_slow[-1]:.2f}",
+                "signal": cross,
+            }
+            total_weight += 1.0
+            if cross == "golden_cross":
+                buy_score += 1.0
+            else:
+                sell_score += 1.0
+    elif indicators.sma and len(indicators.sma) >= 2:
+        # Fallback: SMA-on-SMA (less accurate, kept for backwards compat)
         sma_short = calculate_sma([v.value for v in indicators.sma], 5)
         sma_long = calculate_sma([v.value for v in indicators.sma], 20)
         if sma_short and sma_long:
@@ -321,23 +353,24 @@ async def get_signal(
                 "value": f"{sma_short[-1]:.2f}/{sma_long[-1]:.2f}",
                 "signal": cross,
             }
-            total_weight += 1
+            total_weight += 1.0
             if cross == "golden_cross":
-                buy_score += 1
+                buy_score += 1.0
             else:
-                sell_score += 1
+                sell_score += 1.0
 
-    # Determine signal
+    # Determine signal with continuous confidence (0-1 range)
     if total_weight > 0:
-        if buy_score > sell_score:
+        net_score = (buy_score - sell_score) / total_weight  # -1 to +1
+        if net_score > 0.05:
             signal.signal = Signal.BUY
-            signal.confidence = buy_score / total_weight
-        elif sell_score > buy_score:
+            signal.confidence = round(min(1.0, abs(net_score)), 3)
+        elif net_score < -0.05:
             signal.signal = Signal.SELL
-            signal.confidence = sell_score / total_weight
+            signal.confidence = round(min(1.0, abs(net_score)), 3)
         else:
             signal.signal = Signal.HOLD
-            signal.confidence = 0.5
+            signal.confidence = round(0.5 - abs(net_score), 3)
 
     signal.generated_at = datetime.utcnow()
     return signal

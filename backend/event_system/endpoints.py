@@ -6,9 +6,9 @@ REST API endpoints for event system management
 from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from auth import get_current_user, admin_required, trader_required
-from event_system.models import Event, EventType, EventPriority, EventFilter
-from event_system.event_system_manager import event_system_manager
+from ..auth import get_current_user, admin_required, trader_required
+from .models import Event, EventType, EventPriority, EventFilter
+from .event_system_manager import event_system_manager
 
 router = APIRouter()
 

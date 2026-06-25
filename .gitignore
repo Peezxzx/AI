@@ -33,3 +33,8 @@ tmp/
 
 # Node
 node_modules/
+
+# MT5 Sandbox (too large for GitHub)
+
+# MT5 Sandbox (too large for GitHub)
+incoming/mfxt_phantom/

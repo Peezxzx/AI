@@ -4,8 +4,8 @@ Integration script to start the Event System Manager
 
 import asyncio
 import logging
-from event_system_manager import event_system_manager
-from redis_client import redis_client
+from .event_system_manager import event_system_manager
+from .redis_client import redis_client
 
 # Configure logging
 logging.basicConfig(

@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
-from system.resource_manager import (
+from .resource_manager import (
     SystemTask, TaskPriority, TaskStatus, ResourceType,
     resource_manager, ResourceManager
 )
-from auth import get_current_user, admin_required, trader_required
+from ..auth import get_current_user, admin_required, trader_required
 
 router = APIRouter(prefix="/system", tags=["system"])
 

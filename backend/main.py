@@ -1,25 +1,49 @@
 from fastapi import FastAPI, Depends, HTTPException, Header, status, File, Form
 from fastapi.datastructures import UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from datetime import datetime
-from router import select_model
-from ai_client import ask_ai, ask_ai_vision
-from hermes_integration import hermes_integration
-from multi_agent_coordinator import multi_agent_coordinator
-from memory_manager import memory_manager
+from backend.router import select_model
+from backend.ai_client import ask_ai, ask_ai_vision
+from backend.hermes_integration import hermes_integration
+from backend.multi_agent_coordinator import multi_agent_coordinator
+from backend.memory_manager import memory_manager
 from dataclasses import asdict
-from auth import router as auth_router
-from auth import get_current_user, admin_required, trader_required
-from system import router as system_router
-from event_system.endpoints import router as event_router
-from event_system.event_system_manager import event_system_manager
-from pipeline.router import router as pipeline_router
-from trading.router import router as trading_router
-from trading.mt5_api import router as mt5_router
+from backend.auth import router as auth_router
+from backend.auth import get_current_user, admin_required, trader_required
+from backend.system import router as system_router
+from backend.event_system.endpoints import router as event_router
+from backend.event_system.event_system_manager import event_system_manager
+from backend.pipeline.router import router as pipeline_router
+from backend.trading.router import router as trading_router
+from backend.trading.mt5_api import router as mt5_router
+from backend.office_router import router as office_router
 import psutil
 import os
 
 app = FastAPI()
+
+# Local frontend / Telegram Mini App prototype may be served from a different
+# local port during development (for example http.server on 8765). Keep this
+# permissive for the local command-center API; sensitive write actions are not
+# exposed here.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend")
+if os.path.isdir(FRONTEND_DIR):
+    app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+
+
+@app.get("/virtual-office.html", response_class=FileResponse)
+def virtual_office_app():
+    return FileResponse(os.path.join(FRONTEND_DIR, "virtual-office.html"))
 
 # Include auth routes
 app.include_router(auth_router, prefix="/auth")
@@ -39,13 +63,16 @@ app.include_router(trading_router, prefix="/trading")
 # Include MT5 bridge routes
 app.include_router(mt5_router)
 
+# Include Virtual Office read-only local status routes
+app.include_router(office_router)
+
 
 def get_system_stats():
     """Get real system stats."""
     try:
         cpu = psutil.cpu_percent(interval=0.1)
         mem = psutil.virtual_memory()
-        disk = psutil.disk_usage("/")
+        disk = psutil.disk_usage("C:\\")
         return {
             "cpu_percent": cpu,
             "mem_total_gb": round(mem.total / (1024**3), 1),
@@ -487,7 +514,7 @@ async def startup_event():
     await event_system_manager.initialize()
     
     # Initialize system manager components and start it
-    from system import system_manager
+    from backend.system import system_manager
     system_manager.register_component("multi_agent_coordinator", multi_agent_coordinator)
     system_manager.register_component("memory_manager", memory_manager)
     system_manager.register_component("hermes_integration", hermes_integration)
@@ -669,25 +696,50 @@ def _is_pdf_file(filename: str, content_type: str) -> bool:
 
 
 def _extract_pdf_text(raw: bytes, max_chars: int = 8000) -> tuple:
-    """Extract text from PDF bytes. Returns (text, page_count, truncated)."""
-    import fitz  # pymupdf
-    doc = fitz.open(stream=raw, filetype="pdf")
-    page_count = len(doc)
-    text_parts = []
-    total_chars = 0
-    truncated = False
+    """Extract text from PDF bytes. Returns (text, page_count, truncated).
 
-    for i, page in enumerate(doc):
-        page_text = page.get_text()
-        text_parts.append(f"\n--- หน้า {i + 1} ---\n{page_text}")
-        total_chars += len(page_text)
-        if total_chars >= max_chars:
-            truncated = True
-            break
+    Prefer PyMuPDF when available, but fall back to pure-Python pypdf on Windows
+    where fitz can fail to import because its native `_extra` DLL is missing.
+    """
+    try:
+        import fitz  # pymupdf
 
-    doc.close()
-    full_text = "\n".join(text_parts)[:max_chars]
-    return full_text, page_count, truncated
+        doc = fitz.open(stream=raw, filetype="pdf")
+        page_count = len(doc)
+        text_parts = []
+        total_chars = 0
+        truncated = False
+
+        for i, page in enumerate(doc):
+            page_text = page.get_text()
+            text_parts.append(f"\n--- หน้า {i + 1} ---\n{page_text}")
+            total_chars += len(page_text)
+            if total_chars >= max_chars:
+                truncated = True
+                break
+
+        doc.close()
+        full_text = "\n".join(text_parts)[:max_chars]
+        return full_text, page_count, truncated
+    except Exception:
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(raw))
+        page_count = len(reader.pages)
+        text_parts = []
+        total_chars = 0
+        truncated = False
+
+        for i, page in enumerate(reader.pages):
+            page_text = page.extract_text() or ""
+            text_parts.append(f"\n--- หน้า {i + 1} ---\n{page_text}")
+            total_chars += len(page_text)
+            if total_chars >= max_chars:
+                truncated = True
+                break
+
+        full_text = "\n".join(text_parts)[:max_chars]
+        return full_text, page_count, truncated
 
 
 @app.post("/api/file-analyze")

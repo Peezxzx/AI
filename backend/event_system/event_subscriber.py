@@ -9,7 +9,7 @@ import asyncio
 from typing import List, Dict, Any, Callable, Optional
 from datetime import datetime
 from .models import Event, EventType, EventPriority, EventFilter
-from redis_client import redis_client
+from ..redis_client import redis_client
 
 class EventSubscriber:
     """Event subscriber for subscribing to events from Redis"""

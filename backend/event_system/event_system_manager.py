@@ -12,7 +12,7 @@ from .event_publisher import EventPublisher
 from .event_subscriber import EventSubscriber
 from .event_router import EventRouter
 from .event_processor import EventProcessor
-from redis_client import redis_client
+from ..redis_client import redis_client
 
 class EventSystemManager:
     """Event system manager for coordinating all event system components"""

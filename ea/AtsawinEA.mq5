@@ -1,756 +1,718 @@
 //+------------------------------------------------------------------+
-//|                                          AtsawinEA.mq5 v2.0      |
-//|                    Atsawin AI Trading EA — Unified Edition        |
-//|                    รวม WebRequest + File-based + Risk Management  |
-//|                                                                    |
-//|  รองรับ 2 โหมด:                                                     |
-//|    1. WebRequest Mode — เรียก API จาก Linux VPS โดยตรง            |
-//|    2. File Mode — อ่าน signal จาก JSON file (Python bridge)        |
-//|                                                                    |
-//|  Flow:                                                              |
-//|    WebRequest:  MT5 EA → HTTP GET/POST → Linux VPS API             |
-//|    File Mode:   Python Bridge → latest_signal.json → MT5 EA        |
+//|                                          AtsawinEA.mq5 v4.04     |
+//|                    Atsawin AI Trading EA — Exness XAUUSD          |
 //+------------------------------------------------------------------+
 #property copyright "Atsawin AI"
-#property link      ""
-#property version   "2.00"
+#property version   "4.04"
 #property strict
 
 #include <Trade\Trade.mqh>
-#include <Files\FileTxt.mqh>
-#include <Files\FileJson.mqh>
 
-//+------------------------------------------------------------------+
-//| INPUT PARAMETERS                                                  |
-//+------------------------------------------------------------------+
-input group "═══ Connection Mode ═══"
-input bool     InpUseWebRequest  = true;                              // true=WebRequest, false=File Mode
-input string   InpLinuxVPS       = "http://185.84.160.106";          // Linux VPS URL
-input string   InpApiKey         = "mt5bridge2024";                   // API Key
+input string   InpSignalFile         = "atsawin\\latest_signal.json";
+input string   InpStatusFile         = "atsawin\\ea_runtime_status.json";
+input int      InpPollSeconds        = 30;     // poll signal by time, not only on a new candle
+input int      InpMaxSignalAgeSec    = 150;    // 0 disables; bridge writes timestamp_epoch/expires_at_epoch
+input bool     InpAllowRepeatSameSignal = false; // false = one successful order per signal_id/setup_key
+input double   InpRiskPercent        = 2.5;
+input double   InpMaxLot             = 1.0;
+input double   InpMinLot             = 0.01;
+input int      InpMaxTrades          = 3;
+input int      InpHardMaxMagicTrades = 3;     // absolute safety cap across all charts using this magic
+input int      InpMinEntryGapMinutes = 15;    // minimum gap between entries for this magic+symbol
+input double   InpMaxBasketLossMoney = 15.0;  // block new entries if this magic basket loses more than this; 0 disables
+input double   InpMinConf            = 0.3;
+input double   InpMinActualRR        = 1.0;   // block late entries where current price makes RR too small/negative
+input bool     InpEnforceSymbolMatch = true;  // prevent XAUUSD signal from trading on USDJPY/etc.
+input int      InpMaxSpreadPoints    = 500;   // XAUUSDm spread guard; 0 disables
+input int      InpMagic              = 20260601;
+input int      InpSlippage           = 10;
+input bool     InpShowDashboard      = true;   // show live EA dashboard on chart
+input int      InpDashboardCorner    = 2;      // 0=left upper, 1=left lower, 2=right lower, 3=right upper
+input int      InpDashboardX         = 16;
+input int      InpDashboardY         = 18;
 
-input group "═══ Signal File (File Mode) ═══"
-input string   InpSignalFile     = "atsawin\\latest_signal.json";    // Signal JSON file
-input string   InpStatusFile     = "atsawin\\ea_status.json";        // Status JSON file
+CTrade trade;
+datetime lastBar;
+datetime lastCheck = 0;
+string lastExecutedSignalId = "";
+string g_lastDecision = "BOOT";
+string g_lastReason = "waiting_for_tick";
+string g_lastSignalId = "";
+string g_lastSignal = "";
+double g_lastConfidence = 0.0;
+double g_lastSL = 0.0;
+double g_lastTP = 0.0;
+double g_lastActualRR = 0.0;
+double g_lastSpreadPoints = 0.0;
+int g_lastMagicCount = 0;
+int g_lastSymbolCount = 0;
+double g_lastBasketProfit = 0.0;
+datetime g_lastStatusTime = 0;
+string g_strategyVersion = "";
+string g_setupType = "";
+string g_fvgDirection = "";
+double g_fvgMid = 0.0;
+double g_fibRatio = 0.0;
+double g_fibLevel = 0.0;
+string g_rsiDivergence = "";
 
-input group "═══ Risk Management ═══"
-input double   InpRiskPercent    = 2.0;                              // Risk % per trade
-input double   InpMaxLot         = 1.0;                               // Max lot size
-input double   InpMinLot         = 0.01;                              // Min lot size
-input double   InpMaxSpreadPt    = 30;                                // Max spread (points)
-input double   InpSlippagePt     = 10;                                // Max slippage (points)
-input int      InpMaxOpenTrades  = 3;                                 // Max concurrent trades
-input double   InpMinConfidence  = 0.3;                               // Min signal confidence (0-1)
-input int      InpSignalExpiry   = 60;                                // Signal expiry (minutes)
-
-input group "═══ Trading ═══"
-input long     InpMagicNumber    = 20250518;                          // Magic Number
-input int      InpPollSec        = 10;                                // Poll interval (seconds)
-input bool     InpEnableLogging  = true;                              // Enable file logging
-input bool     InpEnableAlerts   = true;                              // Enable alert popups
-
-//+------------------------------------------------------------------+
-//| GLOBAL VARIABLES                                                  |
-//+------------------------------------------------------------------+
-CTrade g_trade;
-string g_signalFile;
-string g_statusFile;
-string g_logFile;
-datetime g_lastSignalTime;
-datetime g_lastBarTime;
-datetime g_lastCandleTime;
-int      g_totalTrades;
-double   g_totalPnL;
-double   g_dailyPnL;
-datetime g_lastDay;
-bool     g_initialized;
-int      g_consecutiveErrors;
-int      g_maxConsecutiveErrors = 5;
-
-// Signal structure
-struct SignalData
-{
-   string   version;
-   string   signal;             // "buy" / "sell" / "hold"
-   string   symbol;
-   string   timeframe;
-   double   confidence;         // 0-1
-   string   consensus;
-   double   buy_score;
-   double   sell_score;
-   double   entry_price;
-   double   stop_loss;
-   double   take_profit;
-   double   position_size;
-   double   risk_reward_ratio;
-   string   risk_level;
-   string   timestamp;
-   bool     valid;
-};
-
-SignalData g_currentSignal;
-
-// Trade tracking
-struct TradeRecord
-{
-   ulong    ticket;
-   string   action;
-   double   lot;
-   double   entry_price;
-   double   sl;
-   double   tp;
-   double   close_price;
-   double   pnl;
-   string   status;             // "open" / "closed" / "failed"
-   datetime open_time;
-   datetime close_time;
-   string   source;             // "webrequest" / "file"
-};
-
-TradeRecord g_tradeHistory[];
-int g_tradeCount;
-
-//+------------------------------------------------------------------+
-//| Symbol Mapping: API name → MT5 name (fuzzy match)                |
-//+------------------------------------------------------------------+
-string SymbolToMT5(string apiSymbol)
-{
-   string baseSymbol = apiSymbol;
-   int dotPos = StringFind(apiSymbol, ".");
-   if(dotPos > 0)
-      baseSymbol = StringSubstr(apiSymbol, 0, dotPos);
-
-   if(baseSymbol == "BTCUSDT" || baseSymbol == "BTCUSD") return "BTCUSD";
-   if(baseSymbol == "ETHUSDT" || baseSymbol == "ETHUSD") return "ETHUSD";
-   if(baseSymbol == "XRPUSDT" || baseSymbol == "XRPUSD") return "XRPUSD";
-   if(baseSymbol == "BNBUSDT" || baseSymbol == "BNBUSD") return "BNBUSD";
-   if(baseSymbol == "SOLUSDT" || baseSymbol == "SOLUSD") return "SOLUSD";
-   if(baseSymbol == "XAUUSDT" || baseSymbol == "XAUUSD") return "XAUUSD";
-   if(baseSymbol == "EURUSDT" || baseSymbol == "EURUSD") return "EURUSD";
-   if(baseSymbol == "GBPUSDT" || baseSymbol == "GBPUSD") return "GBPUSD";
-
-   return apiSymbol;
-}
-
-//+------------------------------------------------------------------+
-//| Check if symbols match (handles suffixes like .i, .m, etc.)      |
-//+------------------------------------------------------------------+
-bool SymbolMatches(string signalSymbol, string chartSymbol)
-{
-   if(signalSymbol == chartSymbol) return true;
-
-   string sigBase = signalSymbol;
-   string chrBase = chartSymbol;
-
-   int dotPos;
-   dotPos = StringFind(signalSymbol, ".");
-   if(dotPos > 0) sigBase = StringSubstr(signalSymbol, 0, dotPos);
-   dotPos = StringFind(chartSymbol, ".");
-   if(dotPos > 0) chrBase = StringSubstr(chartSymbol, 0, dotPos);
-
-   if(sigBase == chrBase) return true;
-
-   int sigLen = StringLen(sigBase);
-   int chrLen = StringLen(chrBase);
-   if(sigLen > 4 && chrLen > 4)
-   {
-      string sigTrim = StringSubstr(sigBase, 0, sigLen - 1);
-      string chrTrim = StringSubstr(chrBase, 0, chrLen - 1);
-      if(sigTrim == chrTrim) return true;
-   }
-
-   return false;
-}
-
-//+------------------------------------------------------------------+
-//| Logging                                                           |
-//+------------------------------------------------------------------+
-void LogMessage(string msg)
-{
-   if(!InpEnableLogging) return;
-   string fullMsg = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + " [AtsawinEA v2] " + msg;
-   Print(fullMsg);
-
-   int handle = FileOpen(g_logFile, FILE_WRITE|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
-   if(handle != INVALID_HANDLE)
-   {
-      FileSeek(handle, 0, SEEK_END);
-      FileWriteString(handle, fullMsg + "\r\n");
-      FileClose(handle);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Write status file for external monitoring                         |
-//+------------------------------------------------------------------+
-void WriteStatus()
-{
-   int handle = FileOpen(g_statusFile, FILE_WRITE|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
-   if(handle == INVALID_HANDLE) return;
-
-   FileWriteString(handle, "{");
-   FileWriteString(handle, "\"ea_version\":\"2.00\",");
-   FileWriteString(handle, "\"symbol\":\"" + _Symbol + "\",");
-   FileWriteString(handle, "\"mode\":\"" + (InpUseWebRequest ? "webrequest" : "file") + "\",");
-   FileWriteString(handle, "\"total_trades\":" + IntegerToString(g_totalTrades) + ",");
-   FileWriteString(handle, "\"total_pnl\":" + DoubleToString(g_totalPnL, 2) + ",");
-   FileWriteString(handle, "\"daily_pnl\":" + DoubleToString(g_dailyPnL, 2) + ",");
-   FileWriteString(handle, "\"open_positions\":" + IntegerToString(PositionsTotal()) + ",");
-   FileWriteString(handle, "\"last_signal\":\"" + g_currentSignal.signal + "\",");
-   FileWriteString(handle, "\"last_confidence\":" + DoubleToString(g_currentSignal.confidence, 3) + ",");
-   FileWriteString(handle, "\"consecutive_errors\":" + IntegerToString(g_consecutiveErrors) + ",");
-   FileWriteString(handle, "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",");
-   FileWriteString(handle, "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",");
-   FileWriteString(handle, "\"last_update\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\"");
-   FileWriteString(handle, "}");
-
-   FileClose(handle);
-}
-
-//+------------------------------------------------------------------+
-//| Simple JSON value extractor                                       |
-//+------------------------------------------------------------------+
 string JS(string json, string key)
 {
    string s = "\"" + key + "\":";
    int p = StringFind(json, s);
    if(p < 0) return "";
    p += StringLen(s);
-   while(p < StringLen(json) && StringGetCharacter(json, p) == ' ') p++;
-   bool q = (StringGetCharacter(json, p) == '\"');
+   while(p < StringLen(json))
+   {
+      int ch = StringGetCharacter(json, p);
+      if(ch==' ' || ch=='\t' || ch=='\r' || ch=='\n') p++;
+      else break;
+   }
+   if(p >= StringLen(json)) return "";
+
+   bool q = (StringGetCharacter(json, p) == '"');
    if(q) p++;
+
    int e = p;
-   if(q) while(e < StringLen(json) && StringGetCharacter(json, e) != '\"') e++;
-   else  while(e < StringLen(json) && StringGetCharacter(json, e) != ',' && StringGetCharacter(json, e) != '}') e++;
+   if(q)
+   {
+      while(e < StringLen(json) && StringGetCharacter(json, e) != '"') e++;
+   }
+   else
+   {
+      while(e < StringLen(json))
+      {
+         int ch2 = StringGetCharacter(json, e);
+         if(ch2 == ',' || ch2 == '}' || ch2 == '\r' || ch2 == '\n') break;
+         e++;
+      }
+   }
    return StringSubstr(json, p, e - p);
 }
 
-//+------------------------------------------------------------------+
-//| WebRequest GET                                                    |
-//+------------------------------------------------------------------+
-string DoGet(string path)
+string StrTrimSimple(string s)
 {
-   string url     = InpLinuxVPS + path;
-   string headers = "X-API-Key: " + InpApiKey + "\r\n";
-   char   data[], result[];
-   string rh;
-   ResetLastError();
-   int code = WebRequest("GET", url, headers, 5000, data, result, rh);
-   if(code == 200) return CharArrayToString(result);
-   if(code < 0) LogMessage("WebRequest GET error=" + IntegerToString(GetLastError()) + " path=" + path);
-   return "";
-}
-
-//+------------------------------------------------------------------+
-//| WebRequest POST                                                   |
-//+------------------------------------------------------------------+
-string DoPost(string path, string body)
-{
-   string url     = InpLinuxVPS + path;
-   string headers = "Content-Type: application/json\r\nX-API-Key: " + InpApiKey + "\r\n";
-   char   data[], result[];
-   string rh;
-   StringToCharArray(body, data, 0, StringLen(body));
-   ArrayResize(data, StringLen(body));
-   ResetLastError();
-   int code = WebRequest("POST", url, headers, 5000, data, result, rh);
-   if(code == 200) return CharArrayToString(result);
-   if(code < 0) LogMessage("WebRequest POST error=" + IntegerToString(GetLastError()) + " path=" + path);
-   return "";
-}
-
-//+------------------------------------------------------------------+
-//| Send price data to Linux VPS                                      |
-//+------------------------------------------------------------------+
-void SendPrice()
-{
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol, tick)) return;
-   string body = StringFormat(
-      "{\"symbol\":\"%s\",\"bid\":%.5f,\"ask\":%.5f,\"time\":%d,"
-      "\"account\":{\"balance\":%.2f,\"equity\":%.2f,\"margin\":%.2f,"
-      "\"freeMargin\":%.2f,\"profit\":%.2f}}",
-      _Symbol, tick.bid, tick.ask, (int)tick.time,
-      AccountInfoDouble(ACCOUNT_BALANCE),
-      AccountInfoDouble(ACCOUNT_EQUITY),
-      AccountInfoDouble(ACCOUNT_MARGIN),
-      AccountInfoDouble(ACCOUNT_MARGIN_FREE),
-      AccountInfoDouble(ACCOUNT_PROFIT));
-   DoPost("/api/mt5/price", body);
-}
-
-//+------------------------------------------------------------------+
-//| Send candle data to Linux VPS                                     |
-//+------------------------------------------------------------------+
-void SendCandles(string tfName, ENUM_TIMEFRAMES tf, int count)
-{
-   MqlRates rates[];
-   int n = CopyRates(_Symbol, tf, 0, count, rates);
-   if(n <= 0) return;
-   string s = "[";
-   for(int i = 0; i < n; i++)
+   int i = 0;
+   int j = StringLen(s) - 1;
+   while(i <= j)
    {
-      if(i > 0) s += ",";
-      s += StringFormat(
-         "{\"time\":%d,\"open\":%.5f,\"high\":%.5f,\"low\":%.5f,\"close\":%.5f,\"volume\":%d}",
-         (int)rates[i].time, rates[i].open, rates[i].high,
-         rates[i].low, rates[i].close, (int)rates[i].tick_volume);
+      int ch = StringGetCharacter(s, i);
+      if(ch==' ' || ch=='\t' || ch=='\r' || ch=='\n') i++;
+      else break;
    }
-   s += "]";
-   string body = StringFormat(
-      "{\"symbol\":\"%s\",\"timeframe\":\"%s\",\"candles\":%s}",
-      _Symbol, tfName, s);
-   DoPost("/api/mt5/candles", body);
-   LogMessage("Candles " + tfName + ": " + IntegerToString(n) + " bars sent");
-}
-
-//+------------------------------------------------------------------+
-//| Read signal from JSON file (File Mode)                            |
-//+------------------------------------------------------------------+
-bool ReadSignalFromFile(SignalData &signal)
-{
-   signal.valid = false;
-
-   if(!FileIsExist(g_signalFile, FILE_COMMON))
-      return false;
-
-   int handle = FileOpen(g_signalFile, FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_COMMON);
-   if(handle == INVALID_HANDLE)
-      return false;
-
-   string json = "";
-   while(!FileIsEnding(handle))
-      json += FileReadString(handle) + "\n";
-   FileClose(handle);
-
-   if(StringLen(json) < 10)
-      return false;
-
-   signal.version          = JS(json, "version");
-   signal.signal           = JS(json, "signal");
-   signal.symbol           = JS(json, "symbol");
-   signal.timeframe        = JS(json, "timeframe");
-   signal.confidence       = StringToDouble(JS(json, "confidence"));
-   signal.consensus        = JS(json, "consensus");
-   signal.buy_score        = StringToDouble(JS(json, "buy_score"));
-   signal.sell_score       = StringToDouble(JS(json, "sell_score"));
-   signal.entry_price      = StringToDouble(JS(json, "entry_price"));
-   signal.stop_loss        = StringToDouble(JS(json, "stop_loss"));
-   signal.take_profit      = StringToDouble(JS(json, "take_profit"));
-   signal.position_size    = StringToDouble(JS(json, "position_size"));
-   signal.risk_reward_ratio = StringToDouble(JS(json, "risk_reward_ratio"));
-   signal.risk_level       = JS(json, "risk_level");
-   signal.timestamp        = JS(json, "timestamp");
-   signal.valid            = (signal.signal == "buy" || signal.signal == "sell");
-
-   return signal.valid;
-}
-
-//+------------------------------------------------------------------+
-//| Read signal from WebRequest (WebRequest Mode)                     |
-//+------------------------------------------------------------------+
-bool ReadSignalFromAPI(SignalData &signal)
-{
-   signal.valid = false;
-
-   string resp = DoGet("/api/mt5/signal?symbol=" + _Symbol);
-   if(StringLen(resp) < 5) return false;
-   if(StringFind(resp, "\"signal\":null") >= 0) return false;
-
-   signal.signal    = JS(resp, "action");
-   signal.confidence = StringToDouble(JS(resp, "confidence"));
-   signal.stop_loss  = StringToDouble(JS(resp, "sl"));
-   signal.take_profit = StringToDouble(JS(resp, "tp"));
-   signal.entry_price = StringToDouble(JS(resp, "entry_price"));
-   signal.risk_reward_ratio = StringToDouble(JS(resp, "risk_reward_ratio"));
-   signal.consensus  = JS(resp, "consensus");
-   signal.risk_level = JS(resp, "risk_level");
-   signal.timestamp  = JS(resp, "timestamp");
-
-   if(signal.signal == "BUY") signal.signal = "buy";
-   if(signal.signal == "SELL") signal.signal = "sell";
-
-   signal.valid = (signal.signal == "buy" || signal.signal == "sell");
-   return signal.valid;
-}
-
-//+------------------------------------------------------------------+
-//| Validate signal before execution                                  |
-//+------------------------------------------------------------------+
-bool ValidateSignal(SignalData &signal)
-{
-   // Check confidence
-   if(signal.confidence < InpMinConfidence)
+   while(j >= i)
    {
-      LogMessage("Signal rejected: confidence too low (" + DoubleToString(signal.confidence, 3) + " < " + DoubleToString(InpMinConfidence, 3) + ")");
-      return false;
+      int ch2 = StringGetCharacter(s, j);
+      if(ch2==' ' || ch2=='\t' || ch2=='\r' || ch2=='\n') j--;
+      else break;
+   }
+   if(j < i) return "";
+   return StringSubstr(s, i, j - i + 1);
+}
+
+string StrToLowerSimple(string s)
+{
+   string out = "";
+   for(int i=0; i<StringLen(s); i++)
+   {
+      int ch = StringGetCharacter(s, i);
+      if(ch >= 'A' && ch <= 'Z') ch += 32;
+      out += CharToString((uchar)ch);
+   }
+   return out;
+}
+
+bool SymbolMatchesChart(string sigSymbol, string sigMt5Symbol)
+{
+   string chart = StrToLowerSimple(StrTrimSimple(_Symbol));
+   string mt5s  = StrToLowerSimple(StrTrimSimple(sigMt5Symbol));
+   string base  = StrToLowerSimple(StrTrimSimple(sigSymbol));
+
+   if(mt5s != "")
+      return (mt5s == chart);
+
+   if(base == "")
+      return true; // old minimal signals had no symbol; keep compatibility
+
+   if(base == chart)
+      return true;
+
+   // Broker suffix compatibility: XAUUSD signal may run on XAUUSDm chart.
+   if(StringFind(chart, base) == 0)
+      return true;
+
+   return false;
+}
+
+// Get SymbolInfoDouble safely
+bool GetSymbolDouble(ENUM_SYMBOL_INFO_DOUBLE prop, double &out)
+{
+   return SymbolInfoDouble(_Symbol, prop, out);
+}
+
+string JsonEscape(string s)
+{
+   StringReplace(s, "\\", "\\\\");
+   StringReplace(s, "\"", "\\\"");
+   StringReplace(s, "\r", " ");
+   StringReplace(s, "\n", " ");
+   return s;
+}
+
+string ShortText(string s, int maxLen)
+{
+   if(StringLen(s) <= maxLen) return s;
+   return StringSubstr(s, 0, maxLen - 3) + "...";
+}
+
+string MoneyText(double v)
+{
+   string sign = "";
+   if(v > 0) sign = "+";
+   return sign + DoubleToString(v, 2);
+}
+
+color DecisionColor(string decision, string sig)
+{
+   string d = StrToLowerSimple(decision);
+   string s = StrToLowerSimple(sig);
+   if(d == "executed") return clrLime;
+   if(d == "failed") return clrTomato;
+   if(d == "skip") return clrOrange;
+   if(s == "buy") return clrDeepSkyBlue;
+   if(s == "sell") return clrHotPink;
+   return clrSilver;
+}
+
+void SetDashRect(string name, int x, int y, int w, int h, color bg, color border)
+{
+   if(!InpShowDashboard) return;
+   string obj = "ATSAWIN_DASH_" + name;
+   if(ObjectFind(0, obj) < 0)
+      ObjectCreate(0, obj, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, obj, OBJPROP_CORNER, InpDashboardCorner);
+   ObjectSetInteger(0, obj, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, obj, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, obj, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, obj, OBJPROP_YSIZE, h);
+   ObjectSetInteger(0, obj, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(0, obj, OBJPROP_BORDER_COLOR, border);
+   ObjectSetInteger(0, obj, OBJPROP_BACK, false);
+   ObjectSetInteger(0, obj, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, obj, OBJPROP_HIDDEN, true);
+}
+
+void SetDashLabel(string name, string text, int x, int y, int fontSize, color clr)
+{
+   if(!InpShowDashboard) return;
+   string obj = "ATSAWIN_DASH_" + name;
+   if(ObjectFind(0, obj) < 0)
+      ObjectCreate(0, obj, OBJ_LABEL, 0, 0, 0);
+
+   ENUM_ANCHOR_POINT anchor = ANCHOR_LEFT_UPPER;
+   if(InpDashboardCorner == 1) anchor = ANCHOR_LEFT_LOWER;
+   if(InpDashboardCorner == 2) anchor = ANCHOR_RIGHT_LOWER;
+   if(InpDashboardCorner == 3) anchor = ANCHOR_RIGHT_UPPER;
+
+   ObjectSetInteger(0, obj, OBJPROP_CORNER, InpDashboardCorner);
+   ObjectSetInteger(0, obj, OBJPROP_ANCHOR, anchor);
+   ObjectSetInteger(0, obj, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, obj, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, obj, OBJPROP_FONTSIZE, fontSize);
+   ObjectSetInteger(0, obj, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, obj, OBJPROP_BACK, false);
+   ObjectSetInteger(0, obj, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, obj, OBJPROP_HIDDEN, true);
+   ObjectSetString(0, obj, OBJPROP_FONT, "Consolas");
+   ObjectSetString(0, obj, OBJPROP_TEXT, text);
+}
+
+void DeleteDashboard()
+{
+   for(int i = ObjectsTotal(0) - 1; i >= 0; i--)
+   {
+      string obj = ObjectName(0, i);
+      if(StringFind(obj, "ATSAWIN_DASH_") == 0)
+         ObjectDelete(0, obj);
+   }
+}
+
+void DrawDashboard()
+{
+   if(!InpShowDashboard)
+   {
+      DeleteDashboard();
+      return;
    }
 
-   // Check spread
+   // v4.04: compact text-only dashboard with bridge strategy metadata, default bottom-right.
+   ObjectDelete(0, "ATSAWIN_DASH_PANEL");
+   ObjectDelete(0, "ATSAWIN_DASH_HEADER");
+
    MqlTick tick;
+   bool hasTick = SymbolInfoTick(_Symbol, tick);
+   double bid = 0.0, ask = 0.0;
+   if(hasTick)
+   {
+      bid = tick.bid;
+      ask = tick.ask;
+   }
+
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double floating = equity - balance;
+   string tradeAllowed = TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) ? "ON" : "OFF";
+
+   int x = InpDashboardX;
+   int y = InpDashboardY;
+   color statusClr = DecisionColor(g_lastDecision, g_lastSignal);
+   color pnlClr = (floating >= 0 ? clrLime : clrTomato);
+   color basketClr = (g_lastBasketProfit >= 0 ? clrLime : clrTomato);
+   color autoClr = (tradeAllowed == "ON" ? clrLime : clrTomato);
+   color softWhite = clrWhite;
+   color muted = clrSilver;
+
+   // With bottom-right corner/anchor, larger Y values are drawn higher on the chart.
+   SetDashLabel("TIME", "upd " + TimeToString(g_lastStatusTime, TIME_SECONDS), x, y, 8, clrGray);
+   SetDashLabel("STATUS", ShortText(g_lastDecision + " | " + g_lastReason, 38), x, y + 15, 10, statusClr);
+   SetDashLabel("SPREAD", "spr " + DoubleToString(g_lastSpreadPoints, 1) + "/" + IntegerToString(InpMaxSpreadPoints) + " pt", x, y + 32, 9, muted);
+   SetDashLabel("LEVELS", "SL " + DoubleToString(g_lastSL, _Digits) + "  TP " + DoubleToString(g_lastTP, _Digits), x, y + 49, 9, softWhite);
+   SetDashLabel("SIGNAL", ShortText(g_lastSignal, 8) + "  conf " + DoubleToString(g_lastConfidence, 2) + "  rr " + DoubleToString(g_lastActualRR, 2), x, y + 66, 10, statusClr);
+   SetDashLabel("POSITIONS", "pos " + IntegerToString(g_lastSymbolCount) + "/" + IntegerToString(InpMaxTrades) + "  magic " + IntegerToString(g_lastMagicCount) + "/" + IntegerToString(InpHardMaxMagicTrades), x, y + 83, 9, muted);
+   SetDashLabel("PNL", "float " + MoneyText(floating) + "  basket " + MoneyText(g_lastBasketProfit), x, y + 100, 10, pnlClr);
+   SetDashLabel("ACCOUNT", "bal " + DoubleToString(balance, 2) + "  eq " + DoubleToString(equity, 2), x, y + 117, 9, softWhite);
+   SetDashLabel("PRICE", "bid " + DoubleToString(bid, _Digits) + "  ask " + DoubleToString(ask, _Digits), x, y + 134, 9, muted);
+   SetDashLabel("STRATEGY", ShortText(g_setupType + " " + g_strategyVersion, 44), x, y + 151, 8, clrAqua);
+   SetDashLabel("FVG", "fvg " + g_fvgDirection + " mid " + DoubleToString(g_fvgMid, _Digits), x, y + 166, 8, muted);
+   SetDashLabel("FIB", "fib " + DoubleToString(g_fibRatio, 3) + " @ " + DoubleToString(g_fibLevel, _Digits), x, y + 181, 8, muted);
+   SetDashLabel("RSI_DIV", ShortText("rsi-div " + g_rsiDivergence, 36), x, y + 196, 8, clrGold);
+   SetDashLabel("SYMBOL", _Symbol + "  magic " + IntegerToString(InpMagic), x, y + 211, 8, muted);
+   SetDashLabel("TITLE", "ATSAWIN v4.04  AUTO " + tradeAllowed, x, y + 228, 11, autoClr);
+   ChartRedraw(0);
+}
+
+void WriteRuntimeStatus(string decision,
+                        string reason,
+                        string signalId,
+                        string sig,
+                        double conf,
+                        double sl,
+                        double tp,
+                        double actualRR,
+                        double spreadPoints,
+                        int magicCount,
+                        int symbolCount,
+                        double basketProfit)
+{
+   g_lastDecision = decision;
+   g_lastReason = reason;
+   g_lastSignalId = signalId;
+   g_lastSignal = sig;
+   g_lastConfidence = conf;
+   g_lastSL = sl;
+   g_lastTP = tp;
+   g_lastActualRR = actualRR;
+   g_lastSpreadPoints = spreadPoints;
+   g_lastMagicCount = magicCount;
+   g_lastSymbolCount = symbolCount;
+   g_lastBasketProfit = basketProfit;
+   g_lastStatusTime = TimeCurrent();
+   DrawDashboard();
+
+   MqlTick tick;
+   double bid = 0.0;
+   double ask = 0.0;
    if(SymbolInfoTick(_Symbol, tick))
    {
-      double spread = (tick.ask - tick.bid) / _Point;
-      if(spread > InpMaxSpreadPt)
-      {
-         LogMessage("Signal rejected: spread too high (" + DoubleToString(spread, 1) + " > " + DoubleToString(InpMaxSpreadPt, 1) + " pts)");
-         return false;
-      }
+      bid = tick.bid;
+      ask = tick.ask;
    }
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+   double floating = equity - balance;
 
-   // Check max open positions
-   int openCount = 0;
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      if(PositionGetTicket(i) > 0)
-      {
-         if(PositionGetInteger(POSITION_MAGIC) == InpMagicNumber)
-            openCount++;
-      }
-   }
-   if(openCount >= InpMaxOpenTrades)
-   {
-      LogMessage("Signal rejected: max positions reached (" + IntegerToString(openCount) + "/" + IntegerToString(InpMaxOpenTrades) + ")");
-      return false;
-   }
+   int h = FileOpen(InpStatusFile, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
+   if(h == INVALID_HANDLE) return;
 
-   // Check signal expiry
-   if(StringLen(signal.timestamp) > 0)
-   {
-      datetime sigTime = StringToTime(signal.timestamp);
-      if(sigTime > 0)
-      {
-         int ageMin = (int)((TimeCurrent() - sigTime) / 60);
-         if(ageMin > InpSignalExpiry)
-         {
-            LogMessage("Signal rejected: expired (" + IntegerToString(ageMin) + " min > " + IntegerToString(InpSignalExpiry) + " min)");
-            return false;
-         }
-      }
-   }
-
-   // Check symbol match
-   if(StringLen(signal.symbol) > 0)
-   {
-      if(!SymbolMatches(signal.symbol, _Symbol))
-      {
-         LogMessage("Signal rejected: symbol mismatch (signal=" + signal.symbol + ", chart=" + _Symbol + ")");
-         return false;
-      }
-   }
-
-   return true;
+   string body = StringFormat(
+      "{\"ea_version\":\"4.04\",\"symbol\":\"%s\",\"decision\":\"%s\",\"reason\":\"%s\",\"signal_id\":\"%s\",\"signal\":\"%s\",\"confidence\":%.3f,\"stop_loss\":%.5f,\"take_profit\":%.5f,\"actual_rr\":%.3f,\"spread_points\":%.1f,\"magic_positions\":%d,\"symbol_positions\":%d,\"basket_profit\":%.2f,\"balance\":%.2f,\"equity\":%.2f,\"floating_profit\":%.2f,\"bid\":%.5f,\"ask\":%.5f,\"terminal_trade_allowed\":%d,\"strategy_version\":\"%s\",\"setup_type\":\"%s\",\"fvg_direction\":\"%s\",\"fvg_mid\":%.5f,\"fib_nearest_ratio\":%.5f,\"fib_nearest_level\":%.5f,\"rsi_divergence\":\"%s\",\"last_update\":\"%s\"}",
+      JsonEscape(_Symbol),
+      JsonEscape(decision),
+      JsonEscape(reason),
+      JsonEscape(signalId),
+      JsonEscape(sig),
+      conf,
+      sl,
+      tp,
+      actualRR,
+      spreadPoints,
+      magicCount,
+      symbolCount,
+      basketProfit,
+      balance,
+      equity,
+      floating,
+      bid,
+      ask,
+      (int)TerminalInfoInteger(TERMINAL_TRADE_ALLOWED),
+      JsonEscape(g_strategyVersion),
+      JsonEscape(g_setupType),
+      JsonEscape(g_fvgDirection),
+      g_fvgMid,
+      g_fibRatio,
+      g_fibLevel,
+      JsonEscape(g_rsiDivergence),
+      TimeToString(TimeGMT(), TIME_DATE|TIME_SECONDS)
+   );
+   FileWriteString(h, body);
+   FileClose(h);
 }
 
-//+------------------------------------------------------------------+
-//| Calculate position size based on risk                             |
-//+------------------------------------------------------------------+
-double CalculateLotSize(SignalData &signal)
-{
-   double lot = signal.position_size;
-   if(lot <= 0)
-   {
-      // Calculate from risk percentage
-      double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-      double riskAmount = balance * InpRiskPercent / 100.0;
-
-      MqlTick tick;
-      if(!SymbolInfoTick(_Symbol, tick)) return InpMinLot;
-
-      double slDistance = 0;
-      if(signal.signal == "buy" && signal.stop_loss > 0)
-         slDistance = tick.ask - signal.stop_loss;
-      else if(signal.signal == "sell" && signal.stop_loss > 0)
-         slDistance = signal.stop_loss - tick.bid;
-
-      if(slDistance <= 0) return InpMinLot;
-
-      double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
-      double tickSize  = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
-      if(tickValue <= 0 || tickSize <= 0) return InpMinLot;
-
-      double slTicks = slDistance / tickSize;
-      if(slTicks <= 0) return InpMinLot;
-
-      lot = riskAmount / (slTicks * tickValue);
-   }
-
-   // Clamp
-   if(lot < InpMinLot) lot = InpMinLot;
-   if(lot > InpMaxLot) lot = InpMaxLot;
-
-   // Normalize to lot step
-   double lotStep = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
-   double minLot  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-   double maxLot  = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-   if(lotStep > 0) lot = MathFloor(lot / lotStep) * lotStep;
-   if(lot < minLot) lot = minLot;
-   if(lot > maxLot) lot = maxLot;
-
-   return NormalizeDouble(lot, 2);
-}
-
-//+------------------------------------------------------------------+
-//| Execute trade                                                      |
-//+------------------------------------------------------------------+
-void ExecuteTrade(SignalData &signal, string source)
-{
-   if(!ValidateSignal(signal)) return;
-
-   double lot = CalculateLotSize(signal);
-   MqlTick tick;
-   if(!SymbolInfoTick(_Symbol, tick)) return;
-
-   double sl = signal.stop_loss;
-   double tp = signal.take_profit;
-
-   LogMessage("Executing " + signal.signal + " lot=" + DoubleToString(lot, 2) +
-              " SL=" + DoubleToString(sl, 5) + " TP=" + DoubleToString(tp, 5) +
-              " conf=" + DoubleToString(signal.confidence, 3) +
-              " source=" + source);
-
-   bool ok = false;
-   if(signal.signal == "buy")
-      ok = g_trade.Buy(lot, _Symbol, tick.ask, sl, tp, "AtsawinEA_v2");
-   else if(signal.signal == "sell")
-      ok = g_trade.Sell(lot, _Symbol, tick.bid, sl, tp, "AtsawinEA_v2");
-
-   if(ok)
-   {
-      g_totalTrades++;
-      g_consecutiveErrors = 0;
-      LogMessage("EXECUTED: " + signal.signal + " @ " + DoubleToString(g_trade.ResultPrice(), 5) +
-                 " #" + IntegerToString((int)g_trade.ResultOrder()) +
-                 " lot=" + DoubleToString(lot, 2));
-
-      // Report execution to API
-      DoPost("/api/mt5/executed", StringFormat(
-         "{\"ticket\":%d,\"action\":\"%s\",\"price\":%.5f,\"lot\":%.2f,"
-         "\"sl\":%.5f,\"tp\":%.5f,\"confidence\":%.3f,\"source\":\"%s\",\"time\":%d}",
-         (int)g_trade.ResultOrder(), signal.signal, g_trade.ResultPrice(), lot,
-         sl, tp, signal.confidence, source, (int)TimeCurrent()));
-
-      // Record trade
-      int n = ArraySize(g_tradeHistory);
-      ArrayResize(g_tradeHistory, n + 1);
-      g_tradeHistory[n].ticket     = g_trade.ResultOrder();
-      g_tradeHistory[n].action     = signal.signal;
-      g_tradeHistory[n].lot        = lot;
-      g_tradeHistory[n].entry_price = g_trade.ResultPrice();
-      g_tradeHistory[n].sl         = sl;
-      g_tradeHistory[n].tp         = tp;
-      g_tradeHistory[n].status     = "open";
-      g_tradeHistory[n].open_time  = TimeCurrent();
-      g_tradeHistory[n].source     = source;
-      g_tradeCount = n + 1;
-
-      if(InpEnableAlerts)
-         Alert("AtsawinEA: " + signal.signal + " " + _Symbol + " @ " + DoubleToString(g_trade.ResultPrice(), 5));
-   }
-   else
-   {
-      g_consecutiveErrors++;
-      LogMessage("FAILED: retcode=" + IntegerToString(g_trade.ResultRetcode()) +
-                 " error=" + IntegerToString(GetLastError()));
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Check and close positions commanded by API                        |
-//+------------------------------------------------------------------+
-void CheckClose()
-{
-   string resp = DoGet("/api/mt5/close?symbol=" + _Symbol);
-   string ts = JS(resp, "closeTicket");
-   if(StringLen(ts) == 0 || ts == "null") return;
-
-   ulong closeTicket = (ulong)StringToInteger(ts);
-
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
-   {
-      ulong ticket = PositionGetTicket(i);
-      if(ticket == closeTicket)
-      {
-         if(g_trade.PositionClose(ticket))
-         {
-            LogMessage("Position closed: #" + IntegerToString((int)ticket));
-
-            // Update trade record
-            for(int j = 0; j < ArraySize(g_tradeHistory); j++)
-            {
-               if(g_tradeHistory[j].ticket == ticket)
-               {
-                  g_tradeHistory[j].status = "closed";
-                  g_tradeHistory[j].close_time = TimeCurrent();
-                  g_tradeHistory[j].close_price = PositionGetDouble(POSITION_PRICE_CURRENT);
-                  g_tradeHistory[j].pnl = PositionGetDouble(POSITION_PROFIT);
-                  g_dailyPnL += g_tradeHistory[j].pnl;
-                  break;
-               }
-            }
-         }
-         else
-            LogMessage("Close failed: #" + IntegerToString((int)ticket) + " retcode=" + IntegerToString(g_trade.ResultRetcode()));
-         break;
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Expert initialization function                                    |
-//+------------------------------------------------------------------+
 int OnInit()
 {
-   // Setup trade object
-   g_trade.SetExpertMagicNumber(InpMagicNumber);
-   g_trade.SetDeviationInPoints((ulong)InpSlippagePt);
-   g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
-
-   // Build file paths
-   g_signalFile = InpSignalFile;
-   g_statusFile = InpStatusFile;
-   g_logFile    = "atsawin\\ea_log.txt";
-
-   // Initialize counters
-   g_totalTrades = 0;
-   g_totalPnL    = 0;
-   g_dailyPnL    = 0;
-   g_lastDay     = 0;
-   g_initialized = true;
-   g_consecutiveErrors = 0;
-   g_lastCandleTime = 0;
-   g_lastBarTime    = 0;
-   ArrayResize(g_tradeHistory, 0);
-   g_tradeCount = 0;
-
-   // Reset signal
-   g_currentSignal.valid = false;
-
-   LogMessage("═══════════════════════════════════════════");
-   LogMessage("AtsawinEA v2.0 started");
-   LogMessage("Symbol: " + _Symbol + " | Mode: " + (InpUseWebRequest ? "WebRequest" : "File"));
-   LogMessage("VPS: " + InpLinuxVPS);
-   LogMessage("Risk: " + DoubleToString(InpRiskPercent, 1) + "% | MaxTrades: " + IntegerToString(InpMaxOpenTrades));
-   LogMessage("═══════════════════════════════════════════");
-
-   // Send initial data
-   if(InpUseWebRequest)
-   {
-      SendPrice();
-      SendCandles("M15", PERIOD_M15, 200);
-      SendCandles("H1",  PERIOD_H1,  200);
-      SendCandles("H4",  PERIOD_H4,  200);
-      SendCandles("D1",  PERIOD_D1,  200);
-   }
-
-   EventSetTimer(InpPollSec);
-   WriteStatus();
-
+   trade.SetExpertMagicNumber(InpMagic);
+   trade.SetDeviationInPoints((ulong)InpSlippage);
+   trade.SetTypeFilling(ORDER_FILLING_IOC);
+   g_lastStatusTime = TimeCurrent();
+   DrawDashboard();
+   Print("Atsawin EA v4.04 started on ", _Symbol, " poll=", IntegerToString(InpPollSeconds), "s dashboard=", (InpShowDashboard ? "on" : "off"));
    return INIT_SUCCEEDED;
 }
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                  |
-//+------------------------------------------------------------------+
-void OnDeinit(const int r)
+void OnDeinit(const int reason)
 {
-   EventKillTimer();
-   LogMessage("AtsawinEA v2.0 stopped. Total trades: " + IntegerToString(g_totalTrades) + " PnL: " + DoubleToString(g_totalPnL, 2));
-   WriteStatus();
+   DeleteDashboard();
 }
 
-//+------------------------------------------------------------------+
-//| Timer function                                                     |
-//+------------------------------------------------------------------+
-void OnTimer()
+void OnTick()
 {
-   if(!g_initialized) return;
+   if(InpPollSeconds > 0 && lastCheck > 0 && (TimeCurrent() - lastCheck) < InpPollSeconds) return;
+   lastCheck = TimeCurrent();
 
-   // Reset daily PnL at midnight
-   MqlDateTime dt;
-   TimeCurrent(dt);
-   if(dt.day != g_lastDay)
+   // Read signal file (ANSI/UTF-8 safe)
+   string paths[2];
+   paths[0] = InpSignalFile;                  // terminal data folder MQL5\\Files\\...
+   paths[1] = "atsawin\\latest_signal.json"; // fallback
+
+   string json = "";
+   string usedPath = "";
+
+   for(int i = 0; i < 2; i++)
    {
-      g_dailyPnL = 0;
-      g_lastDay = dt.day;
-   }
-
-   if(InpUseWebRequest)
-   {
-      // WebRequest Mode: send price, check signal, check close
-      SendPrice();
-
-      SignalData signal;
-      if(ReadSignalFromAPI(signal))
+      // Try local terminal Files
+      if(FileIsExist(paths[i], 0))
       {
-         g_currentSignal = signal;
-         ExecuteTrade(signal, "webrequest");
-      }
-
-      CheckClose();
-
-      // Refresh candle data every 15 minutes
-      if(TimeCurrent() - g_lastCandleTime >= 900)
-      {
-         SendCandles("M15", PERIOD_M15, 200);
-         SendCandles("H1",  PERIOD_H1,  200);
-         SendCandles("H4",  PERIOD_H4,  200);
-         SendCandles("D1",  PERIOD_D1,  200);
-         g_lastCandleTime = TimeCurrent();
-      }
-   }
-   else
-   {
-      // File Mode: read signal from JSON file
-      SignalData signal;
-      if(ReadSignalFromFile(signal))
-      {
-         // Check if this is a new signal
-         if(signal.timestamp != g_currentSignal.timestamp)
+         int h = FileOpen(paths[i], FILE_READ|FILE_TXT|FILE_ANSI|FILE_SHARE_READ);
+         if(h != INVALID_HANDLE)
          {
-            g_currentSignal = signal;
-            ExecuteTrade(signal, "file");
+            json = FileReadString(h, (int)FileSize(h));
+            FileClose(h);
+            if(StringLen(json) > 10)
+            {
+               usedPath = paths[i] + " (local)";
+               break;
+            }
+         }
+      }
+
+      // Try common shared Files
+      if(FileIsExist(paths[i], FILE_COMMON))
+      {
+         int hc = FileOpen(paths[i], FILE_READ|FILE_TXT|FILE_ANSI|FILE_SHARE_READ|FILE_COMMON);
+         if(hc != INVALID_HANDLE)
+         {
+            json = FileReadString(hc, (int)FileSize(hc));
+            FileClose(hc);
+            if(StringLen(json) > 10)
+            {
+               usedPath = paths[i] + " (common)";
+               break;
+            }
          }
       }
    }
 
-   // Stop if too many consecutive errors
-   if(g_consecutiveErrors >= g_maxConsecutiveErrors)
+   if(StringLen(json) < 10)
    {
-      LogMessage("WARNING: Too many consecutive errors (" + IntegerToString(g_consecutiveErrors) + "). Pausing...");
-      g_consecutiveErrors = 0;  // Reset and continue after pause
-      Sleep(30000);  // Pause 30 seconds
+      Print("No signal file content");
+      WriteRuntimeStatus("SKIP", "no_signal_file_content", "", "", 0, 0, 0, 0, 0, 0, 0, 0);
+      return;
    }
 
-   WriteStatus();
-}
+   json = StrTrimSimple(json);
+   string sig = StrToLowerSimple(StrTrimSimple(JS(json, "signal")));
+   string signalId = StrTrimSimple(JS(json, "signal_id"));
+   string setupKey = StrTrimSimple(JS(json, "setup_key"));
+   if(signalId == "") signalId = setupKey;
+   string sigSymbol = StrTrimSimple(JS(json, "symbol"));
+   string sigMt5Symbol = StrTrimSimple(JS(json, "mt5_symbol"));
+   double conf = StringToDouble(StrTrimSimple(JS(json, "confidence")));
+   double sl   = StringToDouble(StrTrimSimple(JS(json, "stop_loss")));
+   double tp   = StringToDouble(StrTrimSimple(JS(json, "take_profit")));
+   g_strategyVersion = StrTrimSimple(JS(json, "strategy_version"));
+   g_setupType = StrTrimSimple(JS(json, "setup_type"));
+   g_fvgDirection = StrTrimSimple(JS(json, "fvg_direction"));
+   g_fvgMid = StringToDouble(StrTrimSimple(JS(json, "fvg_mid")));
+   g_fibRatio = StringToDouble(StrTrimSimple(JS(json, "fib_nearest_ratio")));
+   g_fibLevel = StringToDouble(StrTrimSimple(JS(json, "fib_nearest_level")));
+   g_rsiDivergence = StrTrimSimple(JS(json, "rsi_divergence"));
+   long timestampEpoch = (long)StringToInteger(StrTrimSimple(JS(json, "timestamp_epoch")));
+   long expiresAtEpoch = (long)StringToInteger(StrTrimSimple(JS(json, "expires_at_epoch")));
+   if(signalId == "")
+      signalId = sig + "|" + sigSymbol + "|" + DoubleToString(sl, 2) + "|" + DoubleToString(tp, 2) + "|" + DoubleToString(conf, 3);
 
-//+------------------------------------------------------------------+
-//| Trade transaction handler — track PnL                             |
-//+------------------------------------------------------------------+
-void OnTradeTransaction(const MqlTradeTransaction &trans,
-                        const MqlTradeRequest &request,
-                        const MqlTradeResult &result)
-{
-   if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
+   Print("Read from: ", usedPath);
+   Print("JSON keys: signal=", sig,
+         " symbol=", sigSymbol,
+         " mt5_symbol=", sigMt5Symbol,
+         " conf=", DoubleToString(conf,2),
+         " SL=", DoubleToString(sl,2),
+         " TP=", DoubleToString(tp,2),
+         " setup=", g_setupType,
+         " fvg=", g_fvgDirection,
+         " fib=", DoubleToString(g_fibRatio,3),
+         " rsiDiv=", g_rsiDivergence,
+         " id=", signalId);
+
+   long nowEpoch = (long)TimeGMT();
+   if(expiresAtEpoch > 0 && nowEpoch > expiresAtEpoch)
    {
-      if(trans.deal_type == DEAL_TYPE_BUY || trans.deal_type == DEAL_TYPE_SELL)
-      {
-         // Update PnL tracking
-         g_totalPnL += trans.profit;
-         g_dailyPnL += trans.profit;
+      Print("SKIP: signal expired expires_at_epoch=", (string)expiresAtEpoch, " now=", (string)nowEpoch);
+      WriteRuntimeStatus("SKIP", "signal_expired", signalId, sig, conf, sl, tp, 0, 0, 0, 0, 0);
+      return;
+   }
+   if(InpMaxSignalAgeSec > 0 && timestampEpoch > 0 && (nowEpoch - timestampEpoch) > InpMaxSignalAgeSec)
+   {
+      Print("SKIP: signal too old ageSec=", (string)(nowEpoch - timestampEpoch), " max=", IntegerToString(InpMaxSignalAgeSec));
+      WriteRuntimeStatus("SKIP", "signal_too_old", signalId, sig, conf, sl, tp, 0, 0, 0, 0, 0);
+      return;
+   }
+   if(!InpAllowRepeatSameSignal && signalId != "" && signalId == lastExecutedSignalId)
+   {
+      Print("SKIP: duplicate already executed signal_id=", signalId);
+      WriteRuntimeStatus("SKIP", "duplicate_signal_id", signalId, sig, conf, sl, tp, 0, 0, 0, 0, 0);
+      return;
+   }
 
-         LogMessage("Deal: " + EnumToString(trans.deal_type) +
-                    " profit=" + DoubleToString(trans.profit, 2) +
-                    " total=" + DoubleToString(g_totalPnL, 2));
+   if(InpEnforceSymbolMatch && !SymbolMatchesChart(sigSymbol, sigMt5Symbol))
+   {
+      Print("SKIP: signal symbol mismatch chart=", _Symbol,
+            " symbol=", sigSymbol,
+            " mt5_symbol=", sigMt5Symbol);
+      WriteRuntimeStatus("SKIP", "symbol_mismatch", signalId, sig, conf, sl, tp, 0, 0, 0, 0, 0);
+      return;
+   }
+
+   if(conf < InpMinConf)
+   {
+      Print("SKIP: confidence too low (", DoubleToString(conf,2), " < ", DoubleToString(InpMinConf,2), ")");
+      WriteRuntimeStatus("SKIP", "confidence_too_low", signalId, sig, conf, sl, tp, 0, 0, 0, 0, 0);
+      return;
+   }
+   if(sl <= 0 || tp <= 0)
+   {
+      Print("SKIP: invalid SL/TP");
+      WriteRuntimeStatus("SKIP", "invalid_sl_tp", signalId, sig, conf, sl, tp, 0, 0, 0, 0, 0);
+      return;
+   }
+
+   // Count open positions with our magic. Use two limits:
+   // 1) InpMaxTrades for this chart symbol
+   // 2) InpHardMaxMagicTrades as an absolute safety cap across every chart using this magic
+   int magicCount = 0;
+   int symbolCount = 0;
+   double basketProfit = 0.0;
+   datetime lastEntryTime = 0;
+
+   for(int i = PositionsTotal()-1; i >= 0; i--)
+   {
+      ulong t = PositionGetTicket(i);
+      if(t <= 0) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != InpMagic) continue;
+
+      magicCount++;
+      basketProfit += PositionGetDouble(POSITION_PROFIT);
+
+      string posSymbol = PositionGetString(POSITION_SYMBOL);
+      datetime posTime = (datetime)PositionGetInteger(POSITION_TIME);
+      if(posSymbol == _Symbol)
+      {
+         symbolCount++;
+         if(posTime > lastEntryTime) lastEntryTime = posTime;
+      }
+   }
+
+   // Get live tick before any cap/skip decisions so runtime status can show real spread and actual RR.
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick))
+   {
+      WriteRuntimeStatus("SKIP", "no_symbol_tick", signalId, sig, conf, sl, tp, 0, 0, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   double spreadPoints = (tick.ask - tick.bid) / _Point;
+   if(InpMaxSpreadPoints > 0)
+   {
+      if(spreadPoints > InpMaxSpreadPoints)
+      {
+         Print("SKIP: spread too high ", DoubleToString(spreadPoints, 1),
+               " > ", IntegerToString(InpMaxSpreadPoints));
+         WriteRuntimeStatus("SKIP", "spread_too_high", signalId, sig, conf, sl, tp, 0, spreadPoints, magicCount, symbolCount, basketProfit);
+         return;
+      }
+   }
+
+   // Validate actual RR at execution price before cap checks so SKIP statuses are informative.
+   // Bridge RR is calculated at signal-generation price; if price moves close to TP before the next entry,
+   // later entries can have tiny/negative live RR even though JSON still says rr is acceptable.
+   double actualRisk = 0;
+   double actualReward = 0;
+   if(sig == "buy")
+   {
+      actualRisk = tick.ask - sl;
+      actualReward = tp - tick.ask;
+   }
+   else if(sig == "sell")
+   {
+      actualRisk = sl - tick.bid;
+      actualReward = tick.bid - tp;
+   }
+   else
+   {
+      Print("SKIP: signal is hold/unknown: ", sig);
+      WriteRuntimeStatus("SKIP", "hold_or_unknown_signal", signalId, sig, conf, sl, tp, 0, spreadPoints, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   if(actualRisk <= 0 || actualReward <= 0)
+   {
+      Print("SKIP: invalid live geometry sig=", sig,
+            " bid=", DoubleToString(tick.bid, _Digits),
+            " ask=", DoubleToString(tick.ask, _Digits),
+            " SL=", DoubleToString(sl, _Digits),
+            " TP=", DoubleToString(tp, _Digits),
+            " risk=", DoubleToString(actualRisk, 2),
+            " reward=", DoubleToString(actualReward, 2));
+      WriteRuntimeStatus("SKIP", "invalid_live_geometry", signalId, sig, conf, sl, tp, 0, spreadPoints, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   double actualRR = actualReward / actualRisk;
+   if(actualRR < InpMinActualRR)
+   {
+      Print("SKIP: actual RR too low ", DoubleToString(actualRR, 2),
+            " < ", DoubleToString(InpMinActualRR, 2),
+            " sig=", sig,
+            " bid=", DoubleToString(tick.bid, _Digits),
+            " ask=", DoubleToString(tick.ask, _Digits),
+            " SL=", DoubleToString(sl, _Digits),
+            " TP=", DoubleToString(tp, _Digits));
+      WriteRuntimeStatus("SKIP", "actual_rr_too_low", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   if(InpHardMaxMagicTrades > 0 && magicCount >= InpHardMaxMagicTrades)
+   {
+      Print("SKIP: hard magic position cap reached magicCount=", IntegerToString(magicCount),
+            " cap=", IntegerToString(InpHardMaxMagicTrades),
+            " basketProfit=", DoubleToString(basketProfit, 2));
+      WriteRuntimeStatus("SKIP", "hard_magic_cap", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   if(symbolCount >= InpMaxTrades)
+   {
+      Print("SKIP: symbol position cap reached symbolCount=", IntegerToString(symbolCount),
+            " cap=", IntegerToString(InpMaxTrades));
+      WriteRuntimeStatus("SKIP", "symbol_position_cap", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   if(InpMaxBasketLossMoney > 0 && basketProfit <= -InpMaxBasketLossMoney)
+   {
+      Print("SKIP: basket loss guard basketProfit=", DoubleToString(basketProfit, 2),
+            " maxLoss=", DoubleToString(InpMaxBasketLossMoney, 2));
+      WriteRuntimeStatus("SKIP", "basket_loss_guard", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+      return;
+   }
+
+   if(InpMinEntryGapMinutes > 0 && lastEntryTime > 0)
+   {
+      int gapSec = (int)(TimeCurrent() - lastEntryTime);
+      int minGapSec = InpMinEntryGapMinutes * 60;
+      if(gapSec < minGapSec)
+      {
+         Print("SKIP: entry gap too soon gapSec=", IntegerToString(gapSec),
+               " minSec=", IntegerToString(minGapSec));
+         WriteRuntimeStatus("SKIP", "entry_gap_too_soon", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+         return;
+      }
+   }
+
+   // Tick, spread, and actual live RR were validated before cap checks.
+
+   // Get symbol properties
+   double tv = 0, ts = 0, minL = 0, maxL = 0, step = 0;
+   if(!GetSymbolDouble(SYMBOL_TRADE_TICK_VALUE, tv)) return;
+   if(!GetSymbolDouble(SYMBOL_TRADE_TICK_SIZE, ts)) return;
+   GetSymbolDouble(SYMBOL_VOLUME_MIN, minL);
+   GetSymbolDouble(SYMBOL_VOLUME_MAX, maxL);
+   GetSymbolDouble(SYMBOL_VOLUME_STEP, step);
+   if(tv <= 0 || ts <= 0) return;
+   if(minL <= 0) minL = 0.01;
+   if(maxL <= 0) maxL = 1.0;
+   if(step <= 0) step = 0.01;
+
+   // Calculate lot from risk %
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   double riskAmt = balance * InpRiskPercent / 100.0;
+   double slDist  = 0;
+   if(sig == "buy")  slDist = MathAbs(tick.ask - sl);
+   if(sig == "sell") slDist = MathAbs(sl - tick.bid);
+   if(slDist <= 0) return;
+
+   double lot = riskAmt / ((slDist / ts) * tv);
+   if(step > 0) lot = MathFloor(lot / step) * step;
+   if(lot < minL) lot = minL;
+   if(lot > InpMaxLot) lot = InpMaxLot;
+   if(lot > maxL) lot = maxL;
+   lot = NormalizeDouble(lot, 2);
+
+   // Execute
+   double price;
+   if(sig == "buy")
+   {
+      price = tick.ask;
+      if(trade.Buy(lot, _Symbol, price, sl, tp, "Atsawin v4.04"))
+      {
+         lastExecutedSignalId = signalId;
+         WriteRuntimeStatus("EXECUTED", "buy_order_sent", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount + 1, symbolCount + 1, basketProfit);
+         Print("BUY ", lot, " @", price, " SL=", sl, " TP=", tp, " id=", signalId);
+      }
+      else
+      {
+         WriteRuntimeStatus("FAILED", trade.ResultRetcodeDescription(), signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+         Print("BUY failed: ", trade.ResultRetcodeDescription());
+      }
+   }
+   else if(sig == "sell")
+   {
+      price = tick.bid;
+      if(trade.Sell(lot, _Symbol, price, sl, tp, "Atsawin v4.04"))
+      {
+         lastExecutedSignalId = signalId;
+         WriteRuntimeStatus("EXECUTED", "sell_order_sent", signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount + 1, symbolCount + 1, basketProfit);
+         Print("SELL ", lot, " @", price, " SL=", sl, " TP=", tp, " id=", signalId);
+      }
+      else
+      {
+         WriteRuntimeStatus("FAILED", trade.ResultRetcodeDescription(), signalId, sig, conf, sl, tp, actualRR, spreadPoints, magicCount, symbolCount, basketProfit);
+         Print("SELL failed: ", trade.ResultRetcodeDescription());
       }
    }
 }
 
-//+------------------------------------------------------------------+
-//| Book event handler — track position changes                       |
-//+------------------------------------------------------------------+
-void OnBookEvent(const string &symbol)
+void OnBookEvent(const string& symbol)
 {
-   // Can be used for order book analysis in future
+   // Required by some MT5 builds; intentionally unused.
 }
-//+------------------------------------------------------------------+

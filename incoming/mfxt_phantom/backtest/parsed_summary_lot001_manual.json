@@ -1,0 +1,77 @@
+{
+  "final_balance": 9251.53,
+  "net_profit": -748.47,
+  "entries": 1122,
+  "lot_counts": {
+    "0.01": 1122
+  },
+  "side_counts": {
+    "BUY": 484,
+    "SELL": 638
+  },
+  "first_entry": {
+    "dt": "2026.05.01 02:30:00",
+    "side": "BUY",
+    "entry": 4629.805,
+    "sl": 4624.1,
+    "tp": 4686.852,
+    "lot": 0.01,
+    "spread": 280
+  },
+  "last_entry": {
+    "dt": "2026.06.02 23:50:00",
+    "side": "SELL",
+    "entry": 4471.749,
+    "sl": 4481.33,
+    "tp": 4375.934,
+    "lot": 0.01,
+    "spread": 280
+  },
+  "first_low_balance": null,
+  "inputs": [
+    "__MAIN__==== MFXT PHANTOM X ===",
+    "Key=",
+    "Risk=0.01",
+    "LotMode=0",
+    "ManualLotSize=0.01",
+    "AutoSettings=false",
+    "DDMode=0",
+    "ManualDD=5.0",
+    "UseTrailing=true",
+    "UseElasticTP=true",
+    "UseNewsFilter=false",
+    "NewsMinutesBefore=30",
+    "NewsMinutesAfter=30",
+    "NewsImpactFilter=0",
+    "MagicNumber=8888",
+    "SkipAsianSession=true",
+    "AsianStartGMT=22",
+    "AsianEndGMT=7",
+    "UseVolatilityFilter=true",
+    "ATR_Period=14",
+    "ATR_AvgPeriod=50",
+    "ATR_MinRatio=0.7",
+    "UseADXFilter=true",
+    "ADX_Period=14",
+    "ADX_MinLevel=20.0",
+    "ADX_AsianOverride=25.0",
+    "__EMA10__==== EMA10 FILTER ===",
+    "UseEMA10Filter=true",
+    "EMA10_Period=10",
+    "__SLTP__==== SL / TP ===",
+    "SL_Points=500",
+    "RewardRatio=10.0",
+    "UseDynamicSL=true",
+    "DynamicSL_Mult=1.5",
+    "__MABAND__==== MA BAND FILTER ===",
+    "UseMABandFilter=true",
+    "MABand_MinPts=1000"
+  ],
+  "set_applied_checks": {
+    "LotMode": true,
+    "ManualLotSize": true,
+    "AutoSettings": true,
+    "Risk": true,
+    "UseNewsFilter": true
+  }
+}

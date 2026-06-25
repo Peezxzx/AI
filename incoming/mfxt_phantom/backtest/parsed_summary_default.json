@@ -1,0 +1,88 @@
+{
+  "inputs": [
+    "__MAIN__==== MFXT PHANTOM X ===",
+    "Key=",
+    "Risk=1",
+    "LotMode=1",
+    "ManualLotSize=0.1",
+    "AutoSettings=true",
+    "DDMode=1",
+    "ManualDD=15.0",
+    "UseTrailing=true",
+    "UseElasticTP=true",
+    "UseNewsFilter=true",
+    "NewsMinutesBefore=30",
+    "NewsMinutesAfter=30",
+    "NewsImpactFilter=0",
+    "MagicNumber=8888",
+    "SkipAsianSession=true",
+    "AsianStartGMT=22",
+    "AsianEndGMT=7",
+    "UseVolatilityFilter=true",
+    "ATR_Period=14",
+    "ATR_AvgPeriod=50",
+    "ATR_MinRatio=0.7",
+    "UseADXFilter=true",
+    "ADX_Period=14",
+    "ADX_MinLevel=20.0",
+    "ADX_AsianOverride=25.0",
+    "__EMA10__==== EMA10 FILTER ===",
+    "UseEMA10Filter=true",
+    "EMA10_Period=10",
+    "__SLTP__==== SL / TP ===",
+    "SL_Points=500",
+    "RewardRatio=10.0",
+    "UseDynamicSL=true",
+    "DynamicSL_Mult=1.5",
+    "__MABAND__==== MA BAND FILTER ===",
+    "UseMABandFilter=true",
+    "MABand_MinPts=1000"
+  ],
+  "entries": [
+    {
+      "dt": "2026.05.01 02:30:00",
+      "side": "BUY",
+      "entry": 4629.805,
+      "sl": 4624.1,
+      "tp": 4686.852,
+      "lot": 1.0,
+      "spread": 280
+    },
+    {
+      "dt": "2026.05.01 02:35:00",
+      "side": "BUY",
+      "entry": 4629.256,
+      "sl": 4623.558,
+      "tp": 4686.24,
+      "lot": 0.5,
+      "spread": 280
+    },
+    {
+      "dt": "2026.05.01 02:40:00",
+      "side": "BUY",
+      "entry": 4628.548,
+      "sl": 4622.753,
+      "tp": 4686.495,
+      "lot": 0.5,
+      "spread": 280
+    },
+    {
+      "dt": "2026.05.01 06:20:00",
+      "side": "SELL",
+      "entry": 4597.032,
+      "sl": 4603.062,
+      "tp": 4536.728,
+      "lot": 0.5,
+      "spread": 280
+    },
+    {
+      "dt": "2026.05.01 06:25:00",
+      "side": "SELL",
+      "entry": 4598.77,
+      "sl": 4604.988,
+      "tp": 4536.594,
+      "lot": 0.5,
+      "spread": 280
+    }
+  ]
+}

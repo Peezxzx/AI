@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import asyncio
 from .models import Event, EventType, EventPriority
-from redis_client import redis_client
+from ..redis_client import redis_client
 
 class EventPublisher:
     """Event publisher for publishing events to Redis"""
