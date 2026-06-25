@@ -52,3 +52,21 @@ bash ~/sync_bridge.sh pull
 | AI (main) | Peezxzx/AI |
 | ai-trading-rpg | Peezxzx/ai-trading-rpg |
 | atsawin-trading-cafe | Peezxzx/atsawin-trading-cafe |
+
+---
+
+## การย้ายเครื่องแบบเต็มระบบ (Full Migration)
+
+ใช้ script อัตโนมัติ:
+
+```bash
+# บนเครื่องใหม่ หลังจากติดตั้ง Windows, Python, Git, MT5
+bash /c/Users/Administrator/repos/AI/backups/scripts/migrate_to_new_machine.sh
+```
+
+Script จะ:
+1. Clone ทุก repo จาก GitHub
+2. Restore Desktop trading files
+3. ติดตั้ง Python dependencies
+4. ตั้งค่า sync bridge
+5. แสดงขั้นตอนที่ต้องทำเอง (MT5 login, copy EA)
