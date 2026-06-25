@@ -1,0 +1,24 @@
+{
+  "system": "Atsawin Cross-Machine Bridge",
+  "version": "1.0",
+  "created": "2026-06-25",
+  "machines": {
+    "primary": {
+      "hostname": "DESKTOP-4NRHFGA",
+      "os": "Windows 10",
+      "role": "main-trading",
+      "repos_path": "/c/Users/Administrator/repos"
+    }
+  },
+  "sync": {
+    "method": "git",
+    "hub": "github.com/Peezxzx",
+    "frequency": "daily at 23:00 (cron)",
+    "manual_cmd": "bash /c/Users/Administrator/backups/scripts/sync_bridge.sh"
+  },
+  "repos": [
+    {"name": "AI", "github": "Peezxzx/AI", "role": "main system"},
+    {"name": "ai-trading-rpg", "github": "Peezxzx/ai-trading-rpg", "role": "MT5 trading RPG"},
+    {"name": "atsawin-trading-cafe", "github": "Peezxzx/atsawin-trading-cafe", "role": "trading signal hub"}
+  ]
+}
